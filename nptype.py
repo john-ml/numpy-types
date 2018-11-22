@@ -143,13 +143,13 @@ class AExp(Type):
 
 class ALit(AExp):
     def __init__(self, n):
-        self.n = n
+        self.value = n
     def __str__(self):
-        return str(self.n)
+        return str(self.value)
     def __eq__(self, other):
-        return type(self) is type(other) and self.n == other.n
+        return type(self) is type(other) and self.value == other.n
     def __hash__(self):
-        return hash(('ALit', self.n))
+        return hash(('ALit', self.value))
     def tvars(self):
         return set()
     def evars(self):
@@ -159,7 +159,7 @@ class ALit(AExp):
     def under(self, σ):
         return self
     def to_z3(self):
-        return self.n
+        return self.value
     def flipped(self):
         return self
 
@@ -239,13 +239,13 @@ class BExp(Type):
 
 class BLit(BExp):
     def __init__(self, p):
-        self.p = p
+        self.value = p
     def __str__(self):
-        return str(self.p)
+        return str(self.value)
     def __eq__(self, other):
-        return type(self) is type(other) and self.p == other.p
+        return type(self) is type(other) and self.value == other.p
     def __hash__(self):
-        return hash(('BLit', self.p))
+        return hash(('BLit', self.value))
     def tvars(self):
         return set()
     def evars(self):
@@ -255,11 +255,11 @@ class BLit(BExp):
     def under(self, σ):
         return self
     def to_z3(self):
-        return self.p
+        return self.value
     def flipped(self):
         return self
 
-class BVar(AExp):
+class BVar(BExp):
     def __init__(self, var):
         self.var = var
     def __str__(self):
@@ -378,9 +378,6 @@ class Array(Type):
 # update σ : Substitution ∪ Context to unify a and b or fail with ValueError
 # return pointer to σ
 def unify(a, b, σ):
-    cant_unify = lambda a, b, reason='': \
-        ValueError("Can't unify '{}' with '{}'{}".format( \
-            a, b, ('' if reason == '' else ' ({})'.format(reason))))
 
     a = a.under(σ)
     b = b.under(σ)
@@ -393,20 +390,26 @@ def unify(a, b, σ):
     elif type(a) is type(b) is AVar or type(a) is type(b) is BVar:
         return unify(a.var, b.var, σ)
 
+    # literals
+    elif type(a) is type(b) is ALit or type(a) is type(b) is BLit:
+        if a.value != b.value:
+            raise U.cant_unify(a, b, 'unequal values')
+        return σ
+
     # defer arithmetic or boolean expressions to z3
     elif isinstance(a, AExp) and isinstance(b, AExp) or \
          isinstance(a, BExp) and isinstance(b, BExp):
         return σ.union(a, b)
 
     elif type(a) is not type(b):
-        raise cant_unify(a, b, 'incompatible types')
+        raise U.cant_unify(a, b, 'incompatible types')
 
     elif type(a) is TVar and a != b:
-        raise cant_unify(a, b, 'two rigid type variables')
+        raise U.cant_unify(a, b, 'two rigid type variables')
 
     elif type(a) is Array:
         if len(a.shape) != len(b.shape):
-            raise cant_unify(a, b, 'shapes are of unequal length')
+            raise U.cant_unify(a, b, 'shapes are of unequal length')
         for l, r in zip(a.shape, b.shape):
             print(l, r)
             unify(l, r, σ)
