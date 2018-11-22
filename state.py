@@ -46,7 +46,7 @@ class Context:
         import z3
         return z3.Implies(self.F.to_z3(), self.σ.to_z3())
 
-# multiple possible Contexts
+# multiple possible Contexts + ability to branch on new conditions
 class State:
     def __init__(self):
         self.contexts = [Context()]
@@ -91,19 +91,33 @@ class State:
             c.assume(G)
 
     def evars(self):
-        return U.reducemap(U.union, U.evars, self.contexts, set())
+        return U.mapreduce(U.union, U.evars, self.contexts, set())
 
     def tvars(self):
-        return U.reducemap(U.union, U.tvars, self.contexts, set())
+        return U.mapreduce(U.union, U.tvars, self.contexts, set())
 
     def to_z3(self):
         import z3
-        return z3.Implies(self.F.to_z3(), self.σ.to_z3())
+        return z3.And([c.to_z3() for c in self.contexts])
 
 # unification, lifted to State
 def unify(a, b, s):
+    def go(c):
+        try:
+            return T.unify(a, b, c)
+        except ValueError as e:
+            return e
+    contexts = []
     for c in s:
-        T.unify(a, b, c)
+        contexts.append(go(c))
+
+    successes = [c for c in contexts if type(c) is not ValueError]
+    if len(successes) == 0:
+        raise ValueError(U.cant_unify(a, b,
+          'Nested unification attempts failed:\n' +
+          '\n'.join('({}) '.format(i + 1) + str(e) for i, e in enumerate(contexts))))
+
+    s.contexts = successes
     return s
 
 # --------------------------------------------------------------------------------
@@ -120,5 +134,16 @@ if __name__ == '__main__':
 
     s = State()
     print(s)
+    print()
     s.fork(T.BVar(T.TVar('a')))
+    T.unify(T.BVar(T.EVar('a')), T.BLit(True), s.contexts[1])
     print(s)
+    print()
+
+    unify(T.BVar(T.EVar('a')), T.BLit(False), s)
+    print(s)
+    print()
+
+    print(s.tvars())
+    print(s.evars())
+    print(U.to_quantified_z3(s))
