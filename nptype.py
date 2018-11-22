@@ -355,8 +355,6 @@ class Array(Type):
 
 # update σ : Substitution ∪ Context to unify a and b or fail with ValueError
 # return pointer to σ
-#
-# if given σ : State instead, perform unification with each Context
 def unify(a, b, σ):
     cant_unify = lambda a, b, reason='': \
         ValueError("Can't unify '{}' with '{}'{}".format( \

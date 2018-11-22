@@ -1,28 +1,13 @@
-import pattern as P
-from nptype import *
-import substitution as S
 import util as U
-
-class Rule:
-    def __init__(self, pattern, captures, returns=None, forces={}):
-        self.s = pattern
-        self.pattern = P.make_pattern(pattern)
-        self.captures = captures
-        self.returns = returns
-        self.forces = forces
-
-    def __str__(self):
-        return '{} |- {}{}{}'.format(
-            U.typedict(self.captures),
-            self.s,
-            ('' if self.returns is None else ' : {}'.format(self.returns)),
-            ('' if self.forces == {} else ' => {}'.format(U.typedict(self.forces))))
+import pattern as P
+import nptype as T
+import substitution as S
 
 class Context:
     def __init__(self):
         self.σ = S.Substitution(lambda a, b: a << b)
         self.Γ = {}
-        self.F = BLit(True)
+        self.F = T.BLit(True)
 
     def __str__(self):
         return '{} -> {} ({})'.format(self.F, U.typedict(self.Γ), self.σ)
@@ -67,6 +52,9 @@ class State:
     def __str__(self):
         return '\n'.join(str(a) for a in self.contexts)
 
+    def __iter__(self):
+        return iter(self.contexts)
+
     def copy(self):
         s = State()
         s.contexts = [a.copy() for a in self.contexts]
@@ -101,27 +89,23 @@ class State:
         import z3
         return z3.Implies(self.F.to_z3(), self.σ.to_z3())
 
-if __name__ == '__main__':
-    rules = [
-        Rule(
-            # a : array[n, m] |- a.shape[0] : (n : int)
-            '_a.shape[0]',
-            {'a': Array([AVar(TVar('n')), AVar(TVar('m'))])},
-            returns = AVar(TVar('n'))),
-        Rule(
-            # a : (n : int), b : (m : int) |- a + b : (n + m : int)
-            '_a + _b',
-            {'a': AVar(TVar('n')), 'b': AVar(TVar('m'))},
-            returns = AVar(TVar('n')) + AVar(TVar('m'))),
-        Rule(
-            # a : (n : int), b : (m : int) |- a = b => a : (m : int)
-            '_a = _b',
-            {'a': AVar(TVar('n')), 'b': AVar(TVar('m'))},
-            forces = {'a': AVar(TVar('m'))})]
+# -------------------- unification, lifted to State --------------------
 
+def unify(a, b, s):
+    for c in s:
+        T.unify(a, b, c)
+    return s
+
+# --------------------------------------------------------------------------------
+
+if __name__ == '__main__':
     # TODO if statements
 
     print('\n'.join(map(str, rules)))
     print(Context().to_z3())
     print(Context().evars())
     print(Context().tvars())
+
+    a = State()
+    print([b.union(1, 2) for b in a])
+    print(a)
