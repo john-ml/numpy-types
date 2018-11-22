@@ -33,3 +33,5 @@ if __name__ == '__main__':
             '_a = _b',
             {'a': T.AVar(T.TVar('n')), 'b': T.AVar(T.TVar('m'))},
             forces = {'a': T.AVar(T.TVar('m'))})]
+
+    print('\n'.join(map(str, rules)))

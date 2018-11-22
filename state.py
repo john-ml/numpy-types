@@ -34,7 +34,7 @@ class Context:
         return self
 
     def assume(self, G):
-        self.F = T.And(F, G)
+        self.F = T.And(self.F, G)
 
     def evars(self):
         return self.σ.evars()
@@ -62,7 +62,7 @@ class State:
         for c in self.contexts:
             c.assume(F)
         for c in contexts:
-            c.assume(T.Not(f))
+            c.assume(T.Not(F))
         self.contexts.extend(contexts)
         return self
 
@@ -110,8 +110,6 @@ def unify(a, b, s):
 
 if __name__ == '__main__':
     # TODO if statements
-
-    print('\n'.join(map(str, rules)))
     print(Context().to_z3())
     print(Context().evars())
     print(Context().tvars())
@@ -119,3 +117,8 @@ if __name__ == '__main__':
     a = State()
     print([b.union(1, 2) for b in a])
     print(a)
+
+    s = State()
+    print(s)
+    s.fork(T.BVar(T.TVar('a')))
+    print(s)
