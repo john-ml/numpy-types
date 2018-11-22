@@ -23,15 +23,15 @@ class Type:
         pass
     def vars(self):
         return self.tvars() | self.evars()
-    def rename(self, renamings):
+    def renamed(self, renamings):
         pass
     def under(self, σ):
         pass
     def to_z3(self):
         return True
     def fresh(self):
-        return self.rename(dict(zip((a.name for a in self.vars()), fresh_ids)))
-    def flip(self):
+        return self.renamed(dict(zip((a.name for a in self.vars()), fresh_ids)))
+    def flipped(self):
         pass
 
     # for arithmetic expressions
@@ -56,19 +56,26 @@ class Type:
 
     @staticmethod
     def lift(a, context=type):
-        return ALit(a) if type(a) is int else \
-               BLit(a) if type(a) is bool else \
-               (EVar(a, context=context) if a.startswith('?') else TVar(a, context=context)) \
-                   if type(a) is str else \
-               a
+        if type(a) is int:
+            return ALit(a)
+        if type(a) is bool:
+            return BLit(a)
+        if type(a) is str:
+            var = EVar(a) if a.startswith('?') else TVar(a)
+            if context is type:
+                return var
+            if context is int:
+                return AVar(var)
+            if context is bool:
+                return BVar(var)
+        return a
 
 # -------------------- variables --------------------
 
 # universal (rigid) type variable
 class TVar(Type):
-    def __init__(self, name, context=type):
+    def __init__(self, name):
         self.name = name
-        self.context = context
     def __str__(self):
         try:
             int(self.name)
@@ -83,22 +90,21 @@ class TVar(Type):
         return {self}
     def evars(self):
         return set()
-    def rename(self, renamings):
+    def renamed(self, renamings):
         return TVar(renamings[self.name]) if self.name in renamings else TVar(self.name)
     def under(self, σ):
         return σ.find(self)
-    def to_z3(self):
-        return z3.Int(self.name) if self.context == int else \
-               z3.Bool(self.name) if self.context == bool else \
+    def to_z3(self, context=type):
+        return z3.Int(self.name) if context == int else \
+               z3.Bool(self.name) if context == bool else \
                z3.Int(self.name) # shrug
-    def flip(self):
-        return EVar(self.name, context = self.context)
+    def flipped(self):
+        return EVar(self.name)
 
 # existential (ambiguous) type variable
 class EVar(Type):
-    def __init__(self, name, context=type):
+    def __init__(self, name):
         self.name = name
-        self.context = context
     def __str__(self):
         try:
             int(self.name)
@@ -113,16 +119,16 @@ class EVar(Type):
         return set()
     def evars(self):
         return {self}
-    def rename(self, renamings):
+    def renamed(self, renamings):
         return EVar(renamings[self.name]) if self.name in renamings else EVar(self.name)
     def under(self, σ):
         return σ.find(self)
-    def to_z3(self):
-        return z3.Int(self.name) if self.context == int else \
-               z3.Bool(self.name) if self.context == bool else \
+    def to_z3(self, context=type):
+        return z3.Int(self.name) if context == int else \
+               z3.Bool(self.name) if context == bool else \
                z3.Int(self.name) # shrug
-    def flip(self):
-        return TVar(self.name, context = self.context)
+    def flipped(self):
+        return TVar(self.name)
 
 # -------------------- arithmetic expressions --------------------
 
@@ -143,14 +149,36 @@ class ALit(AExp):
         return set()
     def evars(self):
         return set()
-    def rename(self, renamings):
+    def renamed(self, renamings):
         return self
     def under(self, σ):
         return self
     def to_z3(self):
         return self.n
-    def flip(self):
+    def flipped(self):
         return self
+
+class AVar(AExp):
+    def __init__(self, var):
+        self.var = var
+    def __str__(self):
+        return str(self.var)
+    def __eq__(self, other):
+        return type(self) is type(other) and self.var == other.var
+    def __hash__(self):
+        return hash(('AVar', self.var))
+    def tvars(self):
+        return self.var.tvars()
+    def evars(self):
+        return self.var.evars()
+    def renamed(self, renamings):
+        return AVar(self.var.renamed(renamings))
+    def under(self, σ):
+        return AVar(self.var.under(σ))
+    def to_z3(self):
+        return self.var.to_z3(context=int)
+    def flipped(self):
+        return AVar(self.var.flipped())
 
 class Add(AExp):
     def __init__(self, a, b):
@@ -166,14 +194,14 @@ class Add(AExp):
         return self.a.tvars() | self.b.tvars()
     def evars(self):
         return self.a.evars() | self.b.evars()
-    def rename(self, renamings):
-        return Add(self.a.rename(renamings), self.b.rename(renamings))
+    def renamed(self, renamings):
+        return Add(self.a.renamed(renamings), self.b.renamed(renamings))
     def under(self, σ):
         return Add(self.a.under(σ), self.b.under(σ))
     def to_z3(self):
         return self.a.to_z3() + self.b.to_z3()
-    def flip(self):
-        return Add(self.a.flip(), self.b.flip())
+    def flipped(self):
+        return Add(self.a.flipped(), self.b.flipped())
 
 class Mul(AExp):
     def __init__(self, a, b):
@@ -189,14 +217,14 @@ class Mul(AExp):
         return self.a.tvars() | self.b.tvars()
     def evars(self):
         return self.a.evars() | self.b.evars()
-    def rename(self, renamings):
-        return Mul(self.a.rename(renamings), self.b.rename(renamings))
+    def renamed(self, renamings):
+        return Mul(self.a.renamed(renamings), self.b.renamed(renamings))
     def under(self, σ):
         return Mul(self.a.under(σ), self.b.under(σ))
     def to_z3(self):
         return self.a.to_z3() * self.b.to_z3()
-    def flip(self):
-        return Mul(self.a.flip(), self.b.flip())
+    def flipped(self):
+        return Mul(self.a.flipped(), self.b.flipped())
 
 # -------------------- boolean expressions --------------------
 
@@ -210,21 +238,43 @@ class BLit(BExp):
     def __str__(self):
         return str(self.p)
     def __eq__(self, other):
-        return type(self) is type(other) and self.p == other.n
+        return type(self) is type(other) and self.p == other.p
     def __hash__(self):
         return hash(('BLit', self.p))
     def tvars(self):
         return set()
     def evars(self):
         return set()
-    def rename(self, renamings):
+    def renamed(self, renamings):
         return self
     def under(self, σ):
         return self
     def to_z3(self):
         return self.p
-    def flip(self):
+    def flipped(self):
         return self
+
+class BVar(AExp):
+    def __init__(self, var):
+        self.var = var
+    def __str__(self):
+        return str(self.var)
+    def __eq__(self, other):
+        return type(self) is type(other) and self.var == other.var
+    def __hash__(self):
+        return hash(('BVar', self.var))
+    def tvars(self):
+        return self.var.tvars()
+    def evars(self):
+        return self.var.evars()
+    def renamed(self, renamings):
+        return BVar(self.var.renamed(renamings))
+    def under(self, σ):
+        return BVar(self.var.under(σ))
+    def to_z3(self):
+        return self.var.to_z3(context=bool)
+    def flipped(self):
+        return BVar(self.var.flipped())
 
 class Or(BExp):
     def __init__(self, a, b):
@@ -240,14 +290,14 @@ class Or(BExp):
         return self.a.tvars() | self.b.tvars()
     def evars(self):
         return self.a.evars() | self.b.evars()
-    def rename(self, renamings):
-        return Or(self.a.rename(renamings), self.b.rename(renamings))
+    def renamed(self, renamings):
+        return Or(self.a.renamed(renamings), self.b.renamed(renamings))
     def under(self, σ):
         return Or(self.a.under(σ), self.b.under(σ))
     def to_z3(self):
         return z3.Or(self.a.to_z3(), self.b.to_z3())
-    def flip(self):
-        return Or(self.a.flip(), self.b.flip())
+    def flipped(self):
+        return Or(self.a.flipped(), self.b.flipped())
 
 class And(BExp):
     def __init__(self, a, b):
@@ -263,14 +313,14 @@ class And(BExp):
         return self.a.tvars() | self.b.tvars()
     def evars(self):
         return self.a.evars() | self.b.evars()
-    def rename(self, renamings):
-        return And(self.a.rename(renamings), self.b.rename(renamings))
+    def renamed(self, renamings):
+        return And(self.a.renamed(renamings), self.b.renamed(renamings))
     def under(self, σ):
         return And(self.a.under(σ), self.b.under(σ))
     def to_z3(self):
         return z3.And(self.a.to_z3(), self.b.to_z3())
-    def flip(self):
-        return And(self.a.flip(), self.b.flip())
+    def flipped(self):
+        return And(self.a.flipped(), self.b.flipped())
 
 # -------------------- numpy array --------------------
 
@@ -289,12 +339,12 @@ class Array(Type):
     def evars(self):
         from functools import reduce
         return reduce(lambda a, b: a | b, (a.evars() for a in self.shape))
-    def rename(self, renamings):
-        return Array(a.rename(renamings) for a in self.shape)
+    def renamed(self, renamings):
+        return Array(a.renamed(renamings) for a in self.shape)
     def under(self, σ):
         return Array(a.under(σ) for a in self.shape)
-    def flip(self):
-        return Array(a.flip() for a in self.shape)
+    def flipped(self):
+        return Array(a.flipped() for a in self.shape)
 
 # -------------------- unification --------------------
 
@@ -354,7 +404,7 @@ if __name__ == '__main__':
     print([str(a) for a in t.tvars()])
 
     print(t.fresh())
-    print(t.fresh().flip())
+    print(t.fresh().flipped())
 
     def try_unify(*args):
         try:
@@ -365,13 +415,13 @@ if __name__ == '__main__':
     σ = substitution.Substitution(compare)
     try_unify(TVar('a'), TVar('b'), σ)
     try_unify(TVar('a'), TVar('a'), σ)
-    try_unify(Array([TVar('a')]), Array([EVar('b')]), σ)
-    try_unify(TVar('c'), EVar('d'), σ)
-    try_unify(Array([TVar('e')]), Array([TVar('f')]), σ)
-    try_unify(Array([1 + TVar('g')]), Array([TVar('g') + 1]), σ)
+    try_unify(Array([AVar(TVar('a'))]), Array([AVar(EVar('b'))]), σ)
+    try_unify(AVar(TVar('c')), AVar(EVar('d')), σ)
+    try_unify(Array([AVar(TVar('e'))]), Array([AVar(TVar('f'))]), σ)
+    try_unify(Array([1 + AVar(TVar('g'))]), Array([AVar(TVar('g')) + 1]), σ)
     try_unify(
-        TVar('h', context=bool) & TVar('i', context=bool),
-        TVar('i', context=bool) & TVar('h', context=bool), σ)
+        BVar(TVar('h')) & BVar(TVar('i')),
+        BVar(TVar('i')) & BVar(TVar('h')), σ)
     
     F = σ.to_z3()
     print(F)
