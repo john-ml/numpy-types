@@ -147,7 +147,7 @@ class ALit(AExp):
     def __str__(self):
         return str(self.value)
     def __eq__(self, other):
-        return type(self) is type(other) and self.value == other.n
+        return type(self) is type(other) and self.value == other.value
     def __hash__(self):
         return hash(('ALit', self.value))
     def tvars(self):
@@ -243,7 +243,7 @@ class BLit(BExp):
     def __str__(self):
         return str(self.value)
     def __eq__(self, other):
-        return type(self) is type(other) and self.value == other.p
+        return type(self) is type(other) and self.value == other.value
     def __hash__(self):
         return hash(('BLit', self.value))
     def tvars(self):
