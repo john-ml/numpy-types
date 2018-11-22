@@ -380,46 +380,40 @@ def unify(a, b, σ):
     b = b.under(σ)
     σ.push()
 
-    try:
-        # existential variables always unify
-        if EVar in (type(a), type(b)):
-            return σ.union(a, b)
+    # existential variables always unify
+    if EVar in (type(a), type(b)):
+        return σ.union(a, b)
 
-        # lifted variables
-        elif type(a) is type(b) is AVar or type(a) is type(b) is BVar:
-            return unify(a.var, b.var, σ)
+    # lifted variables
+    elif type(a) is type(b) is AVar or type(a) is type(b) is BVar:
+        return unify(a.var, b.var, σ)
 
-        # literals
-        elif type(a) is type(b) is ALit or type(a) is type(b) is BLit:
-            if a.value != b.value:
-                raise U.cant_unify(a, b, 'unequal values')
-            return σ
-
-        # defer arithmetic or boolean expressions to z3
-        elif isinstance(a, AExp) and isinstance(b, AExp) or \
-             isinstance(a, BExp) and isinstance(b, BExp):
-            return σ.union(a, b)
-
-        elif type(a) is not type(b):
-            raise U.cant_unify(a, b, 'incompatible types')
-
-        elif type(a) is TVar and a != b:
-            raise U.cant_unify(a, b, 'two rigid type variables')
-
-        elif type(a) is Array:
-            if len(a.shape) != len(b.shape):
-                raise U.cant_unify(a, b, 'shapes are of unequal length')
-            for l, r in zip(a.shape, b.shape):
-                print(l, r)
-                unify(l, r, σ)
-            return σ
-
-        σ.pop()
+    # literals
+    elif type(a) is type(b) is ALit or type(a) is type(b) is BLit:
+        if a.value != b.value:
+            raise U.cant_unify(a, b, 'unequal values')
         return σ
 
-    except ValueError as e:
-        σ.undo()
-        raise
+    # defer arithmetic or boolean expressions to z3
+    elif isinstance(a, AExp) and isinstance(b, AExp) or \
+         isinstance(a, BExp) and isinstance(b, BExp):
+        return σ.union(a, b)
+
+    elif type(a) is not type(b):
+        raise U.cant_unify(a, b, 'incompatible types')
+
+    elif type(a) is TVar and a != b:
+        raise U.cant_unify(a, b, 'two rigid type variables')
+
+    elif type(a) is Array:
+        if len(a.shape) != len(b.shape):
+            raise U.cant_unify(a, b, 'shapes are of unequal length')
+        for l, r in zip(a.shape, b.shape):
+            print(l, r)
+            unify(l, r, σ)
+        return σ
+
+    return σ
 
 # --------------------------------------------------------------------------------
 

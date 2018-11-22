@@ -107,6 +107,16 @@ class State:
         for c in self.contexts:
             c.undo()
 
+    def atomically(self, f):
+        self.push()
+        try:
+            result = f(self)
+            f.pop()
+            return result
+        except ValueError as e:
+            self.undo()
+            raise
+
     def annotate(self, a, t):
         for c in self.contexts:
             c.annotate(a, t)
@@ -145,15 +155,9 @@ class State:
 
 # unification, lifted to State
 def unify(a, b, s):
-    s.push()
-    try:
-        for c in s:
-            T.unify(a, b, c)
-        s.pop()
-        return s
-    except ValueError as e:
-        s.undo()
-        raise
+    for c in s:
+        T.unify(a, b, c)
+    return s
 
 # --------------------------------------------------------------------------------
 
