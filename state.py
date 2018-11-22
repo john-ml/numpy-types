@@ -83,7 +83,6 @@ class State:
         return [c.find(a) for c in self.contexts]
 
     def union(self, a, b):
-        #TODO exceptions
         for c in self.contexts:
             c.union(a, b)
         return self

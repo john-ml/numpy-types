@@ -363,24 +363,30 @@ def unify(a, b, σ):
     a = a.under(σ)
     b = b.under(σ)
 
-    # TODO: can still unify structurally
-    if isinstance(a, AExp) and isinstance(b, AExp) or \
-       isinstance(a, BExp) and isinstance(b, BExp):
-        return σ.union(a, b)
-
+    # existential variables always unify
     if EVar in (type(a), type(b)):
         return σ.union(a, b)
 
-    if type(a) is not type(b):
+    # lifted variables
+    elif type(a) is type(b) is AVar or type(a) is type(b) is BVar:
+        return unify(a.var, b.var, σ)
+
+    # defer arithmetic or boolean expressions to z3
+    elif isinstance(a, AExp) and isinstance(b, AExp) or \
+       isinstance(a, BExp) and isinstance(b, BExp):
+        return σ.union(a, b)
+
+    elif type(a) is not type(b):
         raise cant_unify(a, b, 'incompatible types')
 
-    if type(a) is TVar and a != b:
+    elif type(a) is TVar and a != b:
         raise cant_unify(a, b, 'two rigid type variables')
 
-    if type(a) is Array:
+    elif type(a) is Array:
         if len(a.shape) != len(b.shape):
             raise cant_unify(a, b, 'shapes are of unequal length')
         for l, r in zip(a.shape, b.shape):
+            print(l, r)
             unify(l, r, σ)
         return σ
 
