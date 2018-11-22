@@ -54,7 +54,7 @@ class Substitution:
 
     def extract_sets(self, predicate):
         return list(U.reducemap(U.union, U.to_z3,
-            U.zipwith(U.on(U.union, predicate), self.equal_pairs()),
+            (predicate(l) | predicate(r) for l, r in self.equal_pairs()),
             set()))
 
     def evars(self):
@@ -68,7 +68,7 @@ class Substitution:
     # TODO: move this out of Substitution?
     def to_z3(self):
         import z3
-        return z3.And(list(U.zipwith(U.on(U.eq, U.to_z3), self.equal_pairs())))
+        return z3.And([l.to_z3() == r.to_z3() for l, r in self.equal_pairs()])
 
 if __name__ == '__main__':
     σ = Substitution(lambda a, b: a < b)
