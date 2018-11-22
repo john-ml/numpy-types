@@ -361,11 +361,9 @@ class Array(Type):
     def __hash__(self):
         return hash(('Array', tuple(self.shape)))
     def tvars(self):
-        from functools import reduce
-        return reduce(lambda a, b: a | b, (a.tvars() for a in self.shape))
+        return U.mapreduce(U.union, U.tvars, self.shape, set())
     def evars(self):
-        from functools import reduce
-        return reduce(lambda a, b: a | b, (a.evars() for a in self.shape))
+        return U.mapreduce(U.union, U.evars, self.shape, set())
     def renamed(self, renamings):
         return Array(a.renamed(renamings) for a in self.shape)
     def under(self, σ):
@@ -458,7 +456,7 @@ if __name__ == '__main__':
     print(σ.evars(), σ.tvars())
     print(z3.simplify(F))
     s = z3.Solver()
-    F = z3.ForAll(σ.tvars(), z3.Exists(σ.evars(), F))
+    F = z3.ForAll(list(σ.tvars()), z3.Exists(list(σ.evars()), F))
     print(F)
     s.add(F)
     print(s.check() == z3.sat)
