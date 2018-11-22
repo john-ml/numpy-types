@@ -378,7 +378,6 @@ class Array(Type):
 def unify(a, b, σ):
     a = a.under(σ)
     b = b.under(σ)
-    σ.push()
 
     # existential variables always unify
     if EVar in (type(a), type(b)):
