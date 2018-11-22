@@ -53,7 +53,7 @@ class Substitution:
         return self.equalities | {(a, self.find(a)) for a in self.m}
 
     def extract_sets(self, predicate):
-        return list(U.reducemap(U.union, U.to_z3,
+        return set(U.reducemap(U.union, U.to_z3,
             (predicate(l) | predicate(r) for l, r in self.equal_pairs()),
             set()))
 

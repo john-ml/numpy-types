@@ -7,10 +7,14 @@ tvars = lambda a: a.tvars()
 to_z3 = lambda a: a.to_z3()
 let = lambda a: a()
 to_quantified_z3 = lambda a: \
-    let(lambda t = tvars(a), e = evars(a): \
+    let(lambda t = list(tvars(a)), e = list(evars(a)): \
     let(lambda ex = (z3.Exists(e, to_z3(a)) if len(e) > 0 else to_z3(a)):
         z3.ForAll(t, ex) if len(t) > 0 else ex))
 reducemap = lambda f, g, a, e: map(g, reduce(f, a, e))
+mapreduce = lambda f, g, a, e: reduce(f, map(g, a), e)
 on = lambda f, g: lambda a, b: f(g(a), g(b))
 eq = lambda a, b: a == b
 zipwith = lambda f, a: (f(l, r) for l, r in a)
+cant_unify = lambda a, b, reason='': \
+    ValueError("Can't unify '{}' with '{}'{}".format( \
+        a, b, ('' if reason == '' else ' ({})'.format(reason))))
