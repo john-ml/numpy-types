@@ -3,6 +3,7 @@ import pattern as P
 import nptype as T
 import substitution as S
 
+# substitution map + typing environment under some precondition
 class Context:
     def __init__(self):
         self.σ = S.Substitution(lambda a, b: a << b)
@@ -33,7 +34,7 @@ class Context:
         return self
 
     def assume(self, G):
-        self.F = And(F, G)
+        self.F = T.And(F, G)
 
     def evars(self):
         return self.σ.evars()
@@ -45,6 +46,7 @@ class Context:
         import z3
         return z3.Implies(self.F.to_z3(), self.σ.to_z3())
 
+# multiple possible Contexts
 class State:
     def __init__(self):
         self.contexts = [Context()]
@@ -54,6 +56,15 @@ class State:
 
     def __iter__(self):
         return iter(self.contexts)
+
+    def fork(self, F):
+        contexts = [c.copy() for c in self.contexts]
+        for c in self.contexts:
+            c.assume(F)
+        for c in contexts:
+            c.assume(T.Not(f))
+        self.contexts.extend(contexts)
+        return self
 
     def copy(self):
         s = State()
@@ -89,8 +100,7 @@ class State:
         import z3
         return z3.Implies(self.F.to_z3(), self.σ.to_z3())
 
-# -------------------- unification, lifted to State --------------------
-
+# unification, lifted to State
 def unify(a, b, s):
     for c in s:
         T.unify(a, b, c)
