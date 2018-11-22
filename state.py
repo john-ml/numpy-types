@@ -102,22 +102,8 @@ class State:
 
 # unification, lifted to State
 def unify(a, b, s):
-    def go(c):
-        try:
-            return T.unify(a, b, c)
-        except ValueError as e:
-            return e
-    contexts = []
     for c in s:
-        contexts.append(go(c))
-
-    successes = [c for c in contexts if type(c) is not ValueError]
-    if len(successes) == 0:
-        raise ValueError(U.cant_unify(a, b,
-          'Nested unification attempts failed:\n' +
-          '\n'.join('({}) '.format(i + 1) + str(e) for i, e in enumerate(contexts))))
-
-    s.contexts = successes
+        T.unify(a, b, c)
     return s
 
 # --------------------------------------------------------------------------------

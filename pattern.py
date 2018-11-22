@@ -69,6 +69,10 @@ def matches(pattern, query):
     if type(pattern) is not type(query):
         return None
 
+    # ignore .context (don't care whether is Load or Store)
+    if type(pattern) is ast.Name:
+        return {} if pattern.id == query.id else None
+
     if type(pattern) is list:
         if len(pattern) == 1 \
            and type(pattern[0]) is ast.Expr \
@@ -123,18 +127,26 @@ def pretty_matches(matches):
 # --------------------------------------------------------------------------------
 
 if __name__ == '__main__':
-    print(matches(
-        ast.parse('def f(a : int) -> bool:\n    __a'),
-        ast.parse('def f(a : int) -> bool:\n    a = a + 1\n    return a')))
-    #print(pretty_parse('def f(a : int) -> bool:\n    return a == 0'))
-    #print(pretty_parse('a * b'))
-    #print(pretty_parse('a = b'))
-    #print(ast.dump(ast.parse('_a * _b')) == ast.dump(ast.parse('_a *    _b')))
-    #print(pretty_matches(matches(ast.parse('_a = _b'), ast.parse('n = n + 1'))))
-    #n_plus_one = matches(ast.parse('_a = _b'), ast.parse('n = n + 1'))['b']
-    #print(pretty_matches(matches(ast.parse('_a + _b').body[0].value, n_plus_one)))
-    #print(make_pattern('_a = _b'))
-    #print(make_pattern('_a * _b'))
-    #print(pretty_matches(matches(make_pattern('return _a'), ast.parse('return 3.0').body[0])))
-    #print(pretty_parse('a : b = 3'))
+    print(pretty_parse('def f(a : int) -> bool:\n    return a == 0'))
+    print(pretty_parse('a * b'))
+    print(pretty_parse('a = b'))
+    print(ast.dump(ast.parse('_a * _b')) == ast.dump(ast.parse('_a *    _b')))
+    print(pretty_matches(matches(ast.parse('_a = _b'), ast.parse('n = n + 1'))))
+    n_plus_one = matches(ast.parse('_a = _b'), ast.parse('n = n + 1'))['b']
+    print(pretty_matches(matches(ast.parse('_a + _b').body[0].value, n_plus_one)))
+    print(make_pattern('_a = _b'))
+    print(make_pattern('_a * _b'))
+    print(pretty_matches(matches(make_pattern('return _a'), ast.parse('return 3.0').body[0])))
+    print(pretty_parse('a : b = 3'))
     print(pretty_parse('if a:\n    pass\nelif b:\n    pass\nelse:\n    pass'))
+    d = {}
+    d[n_plus_one] = 0
+    print(n_plus_one, hash(n_plus_one), d[n_plus_one])
+
+    n = matches(ast.parse('_a'), ast.parse('n'))
+    print(pretty(explode(n['a'])))
+    print(n)
+
+    print(pretty_matches(matches(
+        ast.parse('def f(a : int) -> bool:\n    __a'),
+        ast.parse('def f(a : int) -> bool:\n    a = a + 1\n    return a'))))
