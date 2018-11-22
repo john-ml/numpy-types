@@ -1,3 +1,5 @@
+concat = lambda g: list(map(lambda a: a.to_z3(), reduce(lambda a, b: a | b, g)))
+
 # union-find with path compression
 # items should form partial order under compare
 # if items are not comparable, assume they are equivalent and add equality constraint
@@ -40,18 +42,21 @@ class Substitution:
 
         return self
 
+    def evars(self):
+        return concat(l.evars() | r.evars() for l, r in equalities)
+
+    def tvars(self):
+        return concat(l.tvars() | r.tvars() for l, r in equalities)
+
     # convert equality constraints to z3 formula
     # assumes items implement .to_z3, .evars, .tvars
     # TODO: move this out of Substitution?
     def to_z3(self):
         from functools import reduce
         import z3
-        concat = lambda g: list(map(lambda a: a.to_z3(), reduce(lambda a, b: a | b, g)))
         equalities = self.equalities | {(a, self.find(a)) for a in self.m}
-        tvars = concat(l.tvars() | r.tvars() for l, r in equalities)
-        evars = concat(l.evars() | r.evars() for l, r in equalities)
-        equations = [l.to_z3() == r.to_z3() for l, r in equalities]
-        return z3.ForAll(tvars, z3.Exists(evars, z3.And(equations)))
+        equalities = [l.to_z3() == r.to_z3() for l, r in equalities]
+        return z3.And(equalities)
 
 if __name__ == '__main__':
     σ = Substitution(lambda a, b: abs(a - b) < 0.5)

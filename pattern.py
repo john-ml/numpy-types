@@ -137,3 +137,4 @@ if __name__ == '__main__':
     #print(make_pattern('_a * _b'))
     #print(pretty_matches(matches(make_pattern('return _a'), ast.parse('return 3.0').body[0])))
     #print(pretty_parse('a : b = 3'))
+    print(pretty_parse('if a:\n    pass\nelif b:\n    pass\nelse:\n    pass'))

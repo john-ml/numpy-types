@@ -162,7 +162,7 @@ class AVar(AExp):
     def __init__(self, var):
         self.var = var
     def __str__(self):
-        return str(self.var)
+        return '({} : int)'.format(self.var)
     def __eq__(self, other):
         return type(self) is type(other) and self.var == other.var
     def __hash__(self):
@@ -258,7 +258,7 @@ class BVar(AExp):
     def __init__(self, var):
         self.var = var
     def __str__(self):
-        return str(self.var)
+        return '({} : bool)'.format(self.var)
     def __eq__(self, other):
         return type(self) is type(other) and self.var == other.var
     def __hash__(self):
