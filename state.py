@@ -21,7 +21,6 @@ class Context:
         c.F = self.F
         return c
 
-    # TODO: test push, pop, undo (esp make sure its ok to just store self.F and not self.F.copy())
     def push(self):
         self.σ.push()
         self.history.append((dict(self.Γ), self.F))
@@ -111,9 +110,9 @@ class State:
         self.push()
         try:
             result = f(self)
-            f.pop()
+            self.pop()
             return result
-        except ValueError as e:
+        except:
             self.undo()
             raise
 
@@ -172,25 +171,52 @@ if __name__ == '__main__':
     print(a)
 
     s = State()
-    print(s)
-    print()
+    print(s, '\n\n')
     s, s1 = s.fork(T.BVar(T.TVar('a')))
     unify(T.BVar(T.EVar('a')), T.BLit(True), s1)
-    print(s)
-    print()
-    print(s1)
-    print()
+    print(s, '\n\n')
+    print(s1, '\n\n')
 
     s.join(s1)
-    print(s)
-    print()
+    print(s, '\n\n')
     try:
         unify(T.BVar(T.EVar('a')), T.BLit(False), s)
     except ValueError as e:
         print(e)
-    print(s)
-    print()
+    print(s, '\n\n')
 
     print(s.tvars())
     print(s.evars())
     print(U.to_quantified_z3(s))
+
+    c = Context()
+    c.push()
+    print(c)
+    c.annotate('a', T.AVar(T.TVar('a')) + 1)
+    c.union(1, 2)
+    c.assume(T.BVar(T.TVar('a')))
+    print(c)
+    c.undo()
+    print(c)
+
+    def test(s, fail=True):
+        s.annotate('a', T.AVar(T.TVar('a')) + 1)
+        s.union(1, 2)
+        s.assume(T.BVar(T.TVar('a')))
+        print('test():', s)
+        if fail:
+            raise ValueError('whoops, failed.')
+
+    s = State()
+    print(s, end='\n\n')
+    try:
+        s.atomically(test)
+    except ValueError as e:
+        print(e)
+    print('after test():', s)
+
+    try:
+        s.atomically(lambda s: test(s, fail=False))
+    except ValueError as e:
+        print(e)
+    print('after test():', s)
