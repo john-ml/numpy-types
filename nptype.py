@@ -427,5 +427,7 @@ if __name__ == '__main__':
     print(σ.evars(), σ.tvars())
     print(z3.simplify(F))
     s = z3.Solver()
+    F = z3.ForAll(σ.tvars(), z3.Exists(σ.evars(), F))
+    print(F)
     s.add(F)
     print(s.check() == z3.sat)

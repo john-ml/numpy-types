@@ -93,7 +93,7 @@ class State:
             c.assume(G)
 
     def evars(self):
-        return U.reducemap(U.union, U.tvars, self.contexts, set())
+        return U.reducemap(U.union, U.evars, self.contexts, set())
 
     def tvars(self):
         return U.reducemap(U.union, U.tvars, self.contexts, set())
