@@ -1,5 +1,7 @@
 import util as U
+import nptype as T
 import pattern as P
+import state as S
 
 class Rule:
     def __init__(self, pattern, captures, returns=None, forces={}):

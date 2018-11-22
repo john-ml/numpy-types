@@ -10,6 +10,7 @@ class Substitution:
         self.compare = compare
         self.equalities = set()
         self.bias = True
+        self.history = []
 
     def __str__(self):
         constraints = ', '.join(str(l) + ' ~ ' + str(r) for l, r in self.equalities)
@@ -22,6 +23,18 @@ class Substitution:
         σ.equalities = set(self.equalities)
         σ.bias = self.bias
         return σ
+
+    def push(self):
+        self.history.append((dict(self.m), set(self.equalities), self.bias))
+        return self
+
+    def pop(self):
+        self.history.pop()
+        return self
+
+    def undo(self):
+        self.m, self.equalities, self.bias = self.history.pop()
+        return self
 
     def find(self, a):
         traversed = []
