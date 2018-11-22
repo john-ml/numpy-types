@@ -1,4 +1,5 @@
 import substitution as S
+import util as U
 import z3
 
 # infinite stream of fresh identifiers
@@ -33,6 +34,10 @@ class Type:
         return self.renamed(dict(zip((a.name for a in self.vars()), fresh_ids)))
     def flipped(self):
         pass
+    # partial ordering of types, for unification
+    def __lshift__(a, b):
+        return (type(a) is not EVar and type(b) is EVar) or \
+               (type(a) is type(b) is EVar and a.name <= b.name)
 
     # for arithmetic expressions
     def __add__(self, other):
@@ -348,13 +353,10 @@ class Array(Type):
 
 # -------------------- unification --------------------
 
-# for Substitution
-def compare(a, b):
-    return (type(a) is not EVar and type(b) is EVar) or \
-           (type(a) is type(b) is EVar and a.name <= b.name)
-
-# update σ : Substitution to unify a and b or fail with ValueError
+# update σ : Substitution ∪ Context to unify a and b or fail with ValueError
 # return pointer to σ
+#
+# if given σ : State instead, perform unification with each Context
 def unify(a, b, σ):
     cant_unify = lambda a, b, reason='': \
         ValueError("Can't unify '{}' with '{}'{}".format( \
@@ -373,7 +375,7 @@ def unify(a, b, σ):
 
     # defer arithmetic or boolean expressions to z3
     elif isinstance(a, AExp) and isinstance(b, AExp) or \
-       isinstance(a, BExp) and isinstance(b, BExp):
+         isinstance(a, BExp) and isinstance(b, BExp):
         return σ.union(a, b)
 
     elif type(a) is not type(b):
@@ -417,7 +419,7 @@ if __name__ == '__main__':
         except ValueError as e:
             print(e)
 
-    σ = S.Substitution(compare)
+    σ = S.Substitution(lambda a, b: a << b)
     try_unify(TVar('a'), TVar('b'), σ)
     try_unify(TVar('a'), TVar('a'), σ)
     try_unify(Array([AVar(TVar('a'))]), Array([AVar(EVar('b'))]), σ)
@@ -437,3 +439,7 @@ if __name__ == '__main__':
     print(F)
     s.add(F)
     print(s.check() == z3.sat)
+
+    s1 = z3.Solver()
+    F1 = U.to_quantified_z3(σ)
+    print(F1)

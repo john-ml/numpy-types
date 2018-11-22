@@ -20,7 +20,7 @@ class Rule:
 
 class Context:
     def __init__(self):
-        self.σ = S.Substitution(compare)
+        self.σ = S.Substitution(lambda a, b: a << b)
         self.Γ = {}
         self.F = BLit(True)
 

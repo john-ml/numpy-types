@@ -18,7 +18,7 @@ solve(ForAll(n, Exists([a, b],
   And(True, 1 + n == b + 1, a + 1 == 1 + n, b == a))))
 
 solve(And([a == b for a, b in [(1, 2), (3, 4)]]))
-solve(ForAll(n, True))
-solve(Exists([], n == n))
+solve(ForAll([], n == n))
+#solve(Exists([], n == n))
 
 print({ ((n + 1) * n) : 0 }[(n + 1)*n])
