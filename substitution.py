@@ -1,4 +1,4 @@
-concat = lambda g: list(map(lambda a: a.to_z3(), reduce(lambda a, b: a | b, g)))
+import util as U
 
 # union-find with path compression
 # items should form partial order under compare
@@ -15,6 +15,13 @@ class Substitution:
         constraints = ', '.join(str(l) + ' ~ ' + str(r) for l, r in self.equalities)
         return '{' + ', '.join(str(k) + ' -> ' + str(v) for k, v in self.m.items()) + '}' + \
             (' where ' + constraints if constraints != '' else '')
+
+    def copy(self):
+        σ = Substitution(self.compare)
+        σ.m = dict(self.m)
+        σ.equalities = set(self.equalities)
+        σ.bias = self.bias
+        return σ
 
     def find(self, a):
         traversed = []
@@ -42,27 +49,29 @@ class Substitution:
 
         return self
 
+    def extract_sets(self, predicate):
+        return list(U.reducemap(U.union, U.to_z3,
+            U.zipwith(U.on(U.union, predicate), self.equalities),
+            set()))
+
     def evars(self):
-        return concat(l.evars() | r.evars() for l, r in equalities)
+        return self.extract_sets(U.evars)
 
     def tvars(self):
-        return concat(l.tvars() | r.tvars() for l, r in equalities)
+        return self.extract_sets(U.tvars)
 
     # convert equality constraints to z3 formula
     # assumes items implement .to_z3, .evars, .tvars
     # TODO: move this out of Substitution?
     def to_z3(self):
-        from functools import reduce
         import z3
         equalities = self.equalities | {(a, self.find(a)) for a in self.m}
-        equalities = [l.to_z3() == r.to_z3() for l, r in equalities]
+        equalities = list(U.zipwith(U.on(U.eq, U.to_z3), equalities))
         return z3.And(equalities)
 
 if __name__ == '__main__':
-    σ = Substitution(lambda a, b: abs(a - b) < 0.5)
+    σ = Substitution(lambda a, b: a < b)
     σ.union(1, 2).union(3, 4).union(5, 6).union(7, 8) \
      .union(1, 3).union(5, 7) \
      .union(4, 8)
-    print(σ)
-    σ.union(1, 5.9)
     print(σ)

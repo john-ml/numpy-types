@@ -1,4 +1,4 @@
-import substitution
+import substitution as S
 import z3
 
 # infinite stream of fresh identifiers
@@ -234,7 +234,7 @@ class BExp(Type):
 
 class BLit(BExp):
     def __init__(self, p):
-        self.p = n
+        self.p = p
     def __str__(self):
         return str(self.p)
     def __eq__(self, other):
@@ -363,10 +363,9 @@ def unify(a, b, σ):
     a = a.under(σ)
     b = b.under(σ)
 
-    if isinstance(a, AExp) and isinstance(b, AExp):
-        return σ.union(a, b)
-
-    if isinstance(a, BExp) and isinstance(b, BExp):
+    # TODO: can still unify structurally
+    if isinstance(a, AExp) and isinstance(b, AExp) or \
+       isinstance(a, BExp) and isinstance(b, BExp):
         return σ.union(a, b)
 
     if EVar in (type(a), type(b)):
@@ -412,7 +411,7 @@ if __name__ == '__main__':
         except ValueError as e:
             print(e)
 
-    σ = substitution.Substitution(compare)
+    σ = S.Substitution(compare)
     try_unify(TVar('a'), TVar('b'), σ)
     try_unify(TVar('a'), TVar('a'), σ)
     try_unify(Array([AVar(TVar('a'))]), Array([AVar(EVar('b'))]), σ)
@@ -425,6 +424,7 @@ if __name__ == '__main__':
     
     F = σ.to_z3()
     print(F)
+    print(σ.evars(), σ.tvars())
     print(z3.simplify(F))
     s = z3.Solver()
     s.add(F)
