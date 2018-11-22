@@ -190,7 +190,7 @@ class Add(AExp):
         self.a = a
         self.b = b
     def __str__(self):
-        return '{} + {}'.format(str(self.a), str(self.b))
+        return '{} + {}'.format(self.a, self.b)
     def __eq__(self, other):
         return type(self) is type(other) and self.a == other.a and self.b == other.b
     def __hash__(self):
@@ -213,7 +213,7 @@ class Mul(AExp):
         self.a = a
         self.b = b
     def __str__(self):
-        return '{} * {}'.format(str(self.a), str(self.b))
+        return '{} * {}'.format(self.a, self.b)
     def __eq__(self, other):
         return type(self) is type(other) and self.a == other.a and self.b == other.b
     def __hash__(self):
@@ -286,7 +286,7 @@ class Or(BExp):
         self.a = a
         self.b = b
     def __str__(self):
-        return '{} ∨ {}'.format(str(self.a), str(self.b))
+        return '{} ∨ {}'.format(self.a, self.b)
     def __eq__(self, other):
         return type(self) is type(other) and self.a == other.a and self.b == other.b
     def __hash__(self):
@@ -309,7 +309,7 @@ class And(BExp):
         self.a = a
         self.b = b
     def __str__(self):
-        return '{} ∧ {}'.format(str(self.a), str(self.b))
+        return '{} ∧ {}'.format(self.a, self.b)
     def __eq__(self, other):
         return type(self) is type(other) and self.a == other.a and self.b == other.b
     def __hash__(self):
@@ -326,6 +326,28 @@ class And(BExp):
         return z3.And(self.a.to_z3(), self.b.to_z3())
     def flipped(self):
         return And(self.a.flipped(), self.b.flipped())
+
+class Not(BExp):
+    def __init__(self, a):
+        self.a = a
+    def __str__(self):
+        return '¬{}'.format(self.a)
+    def __eq__(self, other):
+        return type(self) is type(other) and self.a == other.a
+    def __hash__(self):
+        return hash(('Not', self.a))
+    def tvars(self):
+        return self.a.tvars()
+    def evars(self):
+        return self.a.evars()
+    def renamed(self, renamings):
+        return Not(self.a.renamed(renamings))
+    def under(self, σ):
+        return Not(self.a.under(σ))
+    def to_z3(self):
+        return z3.Not(self.a.to_z3())
+    def flipped(self):
+        return Not(self.a.flipped())
 
 # -------------------- numpy array --------------------
 
