@@ -179,7 +179,7 @@ class AVar(AExp):
     def renamed(self, renamings):
         return AVar(self.var.renamed(renamings))
     def under(self, σ):
-        return AVar(self.var.under(σ))
+        return σ.find(self)
     def to_z3(self):
         return self.var.to_z3(context=int)
     def flipped(self):
@@ -275,7 +275,7 @@ class BVar(BExp):
     def renamed(self, renamings):
         return BVar(self.var.renamed(renamings))
     def under(self, σ):
-        return BVar(self.var.under(σ))
+        return σ.find(self)
     def to_z3(self):
         return self.var.to_z3(context=bool)
     def flipped(self):
