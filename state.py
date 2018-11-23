@@ -14,6 +14,9 @@ class Context:
     def __str__(self):
         return '{} -> {} ({})'.format(self.F, U.typedict(self.Γ), self.σ)
 
+    def __contains__(self, a):
+        return a in self.Γ
+
     def copy(self):
         c = Context()
         c.σ = self.σ.copy()
@@ -74,6 +77,9 @@ class State:
 
     def __iter__(self):
         return iter(self.contexts)
+
+    def __contains__(self, a):
+        return all(a in c for c in self.contexts)
 
     # return two copies of state s, s' where s assumes F and s' assumes ¬F
     def fork(self, F):
