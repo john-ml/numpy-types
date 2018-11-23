@@ -190,7 +190,7 @@ class Add(AExp):
         self.a = a
         self.b = b
     def __str__(self):
-        return '{} + {}'.format(self.a, self.b)
+        return '({} + {})'.format(self.a, self.b)
     def __eq__(self, other):
         return type(self) is type(other) and self.a == other.a and self.b == other.b
     def __hash__(self):
@@ -213,7 +213,7 @@ class Mul(AExp):
         self.a = a
         self.b = b
     def __str__(self):
-        return '{} * {}'.format(self.a, self.b)
+        return '({} * {})'.format(self.a, self.b)
     def __eq__(self, other):
         return type(self) is type(other) and self.a == other.a and self.b == other.b
     def __hash__(self):
@@ -286,7 +286,7 @@ class Or(BExp):
         self.a = a
         self.b = b
     def __str__(self):
-        return '{} ∨ {}'.format(self.a, self.b)
+        return '({} ∨ {})'.format(self.a, self.b)
     def __eq__(self, other):
         return type(self) is type(other) and self.a == other.a and self.b == other.b
     def __hash__(self):
@@ -309,7 +309,7 @@ class And(BExp):
         self.a = a
         self.b = b
     def __str__(self):
-        return '{} ∧ {}'.format(self.a, self.b)
+        return '({} ∧ {})'.format(self.a, self.b)
     def __eq__(self, other):
         return type(self) is type(other) and self.a == other.a and self.b == other.b
     def __hash__(self):
