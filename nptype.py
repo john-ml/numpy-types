@@ -60,6 +60,11 @@ class Type:
         return And(Type.lift(other, context=bool), self)
 
     @staticmethod
+    def fresh_all(types):
+        renaming = dict(zip(v.name for t in types for v in t.vars()), fresh_ids)
+        return [t.renamed(renaming) for t in types]
+
+    @staticmethod
     def lift(a, context=type):
         if type(a) is int:
             return ALit(a)

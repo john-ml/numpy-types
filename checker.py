@@ -41,10 +41,11 @@ class Checker:
                     continue
                 self.push()
                 result = rule.f(self, **matches)
-                print('analyze({})\n==> {}{}\n'.format(
+                print('analyze({})\n={}=> {}\nstate = {}\n'.format(
                     P.pretty(P.explode(ast)),
+                    ('({})'.format(rule.name) if rule.name is not None else ''),
                     result,
-                    ('\n(by {})'.format(rule.name) if rule.name is not None else '')))
+                    self.state))
                 self.pop()
                 return result
             except ValueError as e:
@@ -82,24 +83,56 @@ def unary_recursion(f):
 def binary_recursion(f):
     return lambda self, a, b: f(self.analyze(a), self.analyze(b))
 
+def expression(s, assumptions, return_type, name=None):
+    def f(self, **kwargs):
+        names = ({v.name for _, t in assumptions.items() for v in t.vars()} |
+                 {v.name for v in return_type.vars()})
+        renaming = dict(zip(names, T.fresh_ids))
+        for a, ast in kwargs.items():
+            self.state.unify(self.analyze(ast), assumptions[a].renamed(renaming).flipped())
+        return return_type.renamed(renaming).flipped()
+    return Rule(P.make_pattern(s), f, name)
+
 def analyze_module(self, body):
     for a in body:
         self.analyze(a)
 module = Rule(P.raw_pattern('__body'), analyze_module, 'module')
 
-lit_True = make_rule('True', lambda self: T.BLit(True), 'lit_True')
-lit_False = make_rule('False', lambda self: T.BLit(False), 'lit_False')
-bool_or = make_rule('_a or _b', binary_recursion(T.Or), 'bool_or')
-bool_and = make_rule('_a and _b', binary_recursion(T.And), 'bool_and')
-bool_not = make_rule('not _a', unary_recursion(T.Not), 'bool_not')
-test = make_rule('_a = _b', lambda self, a, b: (a, self.analyze(b)), 'test')
+def assignment(self, a, b):
+    t = self.analyze(b)
+    # TODO check if basic types are compatible?
+    # TODO handle things other than just name nodes?
+    assert type(a) is A.Name
+    self.state.annotate(a.id, t)
+assign = make_rule('_a = _b', assignment, 'assign')
 
 # TODO: special cases e.g. 1, 2, 3, ... => type is int
 
 if __name__ == '__main__':
+    lit_True = make_rule('True', lambda self: T.BLit(True), 'lit_True')
+    lit_False = make_rule('False', lambda self: T.BLit(False), 'lit_False')
+
+    bool_or = make_rule('_a or _b', binary_recursion(T.Or), 'bool_or')
+    bool_and = make_rule('_a and _b', binary_recursion(T.And), 'bool_and')
+    bool_not = make_rule('not _a', unary_recursion(T.Not), 'bool_not')
+    test = make_rule('_a = _b', lambda self, a, b: (a, self.analyze(b)), 'test')
     # TODO: bool_not is not in the list of rules. how to handle nicely?
+    # maybe just return a bottom type if none of the patterns match?
+    # that way if used for a recursive call, the bottom will get propagated
+    # make None be the bottom type, then any call to analyze that doesn't
+    # explicitly return must automagically return None
     c = Checker([module, lit_True, lit_False, bool_or, bool_and, test])
     c.check(A.parse('a = False or not True'))
+    print('-' * 100)
 
     c = Checker([module, lit_True, lit_False, bool_or, bool_and, bool_not, test])
     c.check(A.parse('a = (True or False) and (False or not True)\nb = False'))
+    print('-' * 100)
+
+    bool_or = expression(
+        '_a or _b',
+        {'a': T.BVar(T.TVar('a')), 'b': T.BVar(T.TVar('b'))},
+        T.Or(T.BVar(T.TVar('a')), T.BVar(T.TVar('b'))),
+        'bool_or')
+    c = Checker([module, assign, lit_True, lit_False, bool_or])
+    c.check(A.parse('a = True or (False or True)'))

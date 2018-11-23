@@ -152,11 +152,10 @@ class State:
             f(self)
         return self
 
-# unification, lifted to State
-def unify(a, b, s):
-    for c in s:
-        T.unify(a, b, c)
-    return s
+    def unify(self, a, b):
+        for c in self:
+            T.unify(a, b, c)
+        return self
 
 # --------------------------------------------------------------------------------
 
@@ -173,14 +172,14 @@ if __name__ == '__main__':
     s = State()
     print(s, '\n\n')
     s, s1 = s.fork(T.BVar(T.TVar('a')))
-    unify(T.BVar(T.EVar('a')), T.BLit(True), s1)
+    s1.unify(T.BVar(T.EVar('a')), T.BLit(True))
     print(s, '\n\n')
     print(s1, '\n\n')
 
     s.join(s1)
     print(s, '\n\n')
     try:
-        unify(T.BVar(T.EVar('a')), T.BLit(False), s)
+        s.unify(T.BVar(T.EVar('a')), T.BLit(False))
     except ValueError as e:
         print(e)
     print(s, '\n\n')
