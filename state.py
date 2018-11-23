@@ -67,6 +67,10 @@ class Context:
         import z3
         return z3.Implies(self.F.to_z3(), self.σ.to_z3())
 
+    def unify(self, a, b):
+        T.unify(a, b, self.σ)
+        return self
+
 # multiple possible Contexts + ability to branch on new conditions
 class State:
     def __init__(self):

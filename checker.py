@@ -83,20 +83,17 @@ class Checker:
 def make_rule(s, f, name=None):
     return Rule(P.make_pattern(s), f, name)
 
-def unary_recursion(f):
-    return lambda self, a: f(self.analyze(a))
-
-def binary_recursion(f):
-    return lambda self, a, b: f(self.analyze(a), self.analyze(b))
-
+# given a pattern string s, and assumptions about the types of each capture group,
+# return return_type
 def expression(s, assumptions, return_type, name=None):
     def f(self, **kwargs):
         names = ({v.name for _, t in assumptions.items() for v in t.vars()} |
                  {v.name for v in return_type.vars()})
         renaming = dict(zip(names, T.fresh_ids))
+        instantiate = lambda t: t.renamed(renaming).flipped()
         for a, ast in kwargs.items():
-            self.state.unify(self.analyze(ast), assumptions[a].renamed(renaming).flipped())
-        return return_type.renamed(renaming).flipped()
+            self.state.unify(self.analyze(ast), instantiate(assumptions[a]))
+        return instantiate(return_type)
     return Rule(P.make_pattern(s), f, name)
 
 def analyze_module(self, body):
@@ -105,16 +102,21 @@ def analyze_module(self, body):
 module = Rule(P.raw_pattern('__body'), analyze_module, 'module')
 
 def assignment(self, a, b):
-    t = self.analyze(b)
-    # TODO check if basic types are compatible?
-    # TODO handle things other than just name nodes?
     assert type(a) is A.Name
-    self.state.annotate(a.id, t)
+    new_t = self.analyze(b)
+    for c in self.state:
+        if a.id in c:
+            old_t = c.typeof(a.id)
+            if not (isinstance(old_t, T.AExp) and isinstance(new_t, T.AExp) or
+                    isinstance(old_t, T.BExp) and isinstance(new_t, T.BExp)):
+                c.unify(old_t, new_t)
+        c.annotate(a.id, new_t)
 assign = make_rule('_a = _b', assignment, 'assign')
 
 # TODO: special cases e.g. 1, 2, 3, ... => type is int
 
 if __name__ == '__main__':
+    lit_None = make_rule('None', lambda self: T.TNone(), 'lit_None')
     lit_True = make_rule('True', lambda self: T.BLit(True), 'lit_True')
     lit_False = make_rule('False', lambda self: T.BLit(False), 'lit_False')
     bool_not = expression(
@@ -124,5 +126,5 @@ if __name__ == '__main__':
         {'a': T.BVar(T.TVar('a')), 'b': T.BVar(T.TVar('b'))},
         T.Or(T.BVar(T.TVar('a')), T.BVar(T.TVar('b'))),
         'bool_or')
-    c = Checker([module, assign, lit_True, lit_False, bool_or, bool_not])
-    c.check(A.parse('a = True or not False'))
+    c = Checker([module, assign, lit_None, lit_True, lit_False, bool_or, bool_not])
+    c.check(A.parse('a = not True\na = True\na = None'))
