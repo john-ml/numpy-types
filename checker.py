@@ -76,6 +76,12 @@ class Checker:
 def make_rule(s, f, name=None):
     return Rule(P.make_pattern(s), f, name)
 
+def unary_recursion(f):
+    return lambda self, a: f(self.analyze(a))
+
+def binary_recursion(f):
+    return lambda self, a, b: f(self.analyze(a), self.analyze(b))
+
 def analyze_module(self, body):
     for a in body:
         self.analyze(a)
@@ -83,10 +89,17 @@ module = Rule(P.raw_pattern('__body'), analyze_module, 'module')
 
 lit_True = make_rule('True', lambda self: T.BLit(True), 'lit_True')
 lit_False = make_rule('False', lambda self: T.BLit(False), 'lit_False')
+bool_or = make_rule('_a or _b', binary_recursion(T.Or), 'bool_or')
+bool_and = make_rule('_a and _b', binary_recursion(T.And), 'bool_and')
+bool_not = make_rule('not _a', unary_recursion(T.Not), 'bool_not')
 test = make_rule('_a = _b', lambda self, a, b: (a, self.analyze(b)), 'test')
 
 # TODO: special cases e.g. 1, 2, 3, ... => type is int
 
 if __name__ == '__main__':
-    c = Checker([module, lit_True, lit_False, test])
-    c.check(A.parse('a = True\nb = False'))
+    # TODO: bool_not is not in the list of rules. how to handle nicely?
+    c = Checker([module, lit_True, lit_False, bool_or, bool_and, test])
+    c.check(A.parse('a = False or not True'))
+
+    c = Checker([module, lit_True, lit_False, bool_or, bool_and, bool_not, test])
+    c.check(A.parse('a = (True or False) and (False or not True)\nb = False'))
