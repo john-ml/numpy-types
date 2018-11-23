@@ -66,6 +66,8 @@ class Type:
 
     @staticmethod
     def lift(a, context=type):
+        if a is None:
+            return TNone()
         if type(a) is int:
             return ALit(a)
         if type(a) is bool:
@@ -139,6 +141,30 @@ class EVar(Type):
                z3.Int(self.name) # shrug
     def flipped(self):
         return TVar(self.name)
+
+# -------------------- none --------------------
+
+class TNone(Type):
+    def __init__(self):
+        pass
+    def __str__(self):
+        return 'None'
+    def __eq__(self, other):
+        return type(other) is TNone
+    def __hash__(self):
+        return hash('TNone')
+    def tvars(self):
+        return set()
+    def evars(self):
+        return set()
+    def renamed(self, renamings):
+        return self
+    def under(self, σ):
+        return self
+    def to_z3(self, context=type):
+        return z3.Int(next(fresh_ids)) # TODO: replace with something reasonable
+    def flipped(self):
+        return self
 
 # -------------------- arithmetic expressions --------------------
 
