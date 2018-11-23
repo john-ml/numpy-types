@@ -79,6 +79,10 @@ def matches(pattern, query):
            and type(pattern[0].value) is ast.Name \
            and pattern[0].value.id.startswith('__'):
             return { pattern[0].value.id[2:]: query } 
+        if len(pattern) == 1 \
+           and type(pattern[0]) is ast.arg \
+           and pattern[0].arg.startswith('__'):
+            return { pattern[0].arg[2:]: query } 
         if len(pattern) != len(query):
             return None
         captures = {}
@@ -107,15 +111,15 @@ def matches(pattern, query):
     return captures
 
 # extract from code snippet the part of the ast necessary to make a pattern
+# i.e. remove Module node + the Expr node if the pattern is an expression and not a statement
 def make_pattern(s):
     tree = ast.parse(s).body[0]
-    if type(tree) is ast.Expr:
-        return tree.value
-    elif True or type(tree) in (ast.Assign, ast.Return):
-        return tree
-    else:
-        raise ValueError('Unrecognized pattern type: {}'.format(type(tree).__name__))
-    
+    return tree.value if type(tree) is ast.Expr else tree
+
+# treat code snippet as raw pattern (i.e. don't remove unnecessary Module/Expr nodes)
+def raw_pattern(s):
+    return ast.parse(s)
+ 
 # pretty-print matches
 def pretty_matches(matches):
     if matches is None:
@@ -150,3 +154,12 @@ if __name__ == '__main__':
     print(pretty_matches(matches(
         ast.parse('def f(a : int) -> bool:\n    __a'),
         ast.parse('def f(a : int) -> bool:\n    a = a + 1\n    return a'))))
+
+    print(pretty_parse('def f(a : int, b : bool) -> bool:\n    pass'))
+    print(pretty_parse('def f(__a) -> bool:\n    pass'))
+    print(pretty_matches(matches(
+        make_pattern('def f(__args) -> _return_type:\n    __body'),
+        ast.parse('def f(a : int, b : bool) -> bool:\n    pass').body[0])))
+    print(pretty_matches(matches(
+        raw_pattern('__everything'),
+        ast.parse('def f(a : int, b : bool) -> bool:\n    pass'))))
