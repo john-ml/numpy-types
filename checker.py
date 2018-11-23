@@ -13,6 +13,10 @@ class Rule:
         self.f = action
         self.name = name
 
+# type-checker doesn't know what to do
+class ConfusionError(Exception):
+    pass
+
 # type-checker acting on a set of checking rules
 class Checker:
     def __init__(self, rules):
@@ -30,8 +34,8 @@ class Checker:
 
     # try each of the rules in order
     # return result of action corresponding to first matching rule
-    # succeed (having checked nothing) if no rules match
-    # fail if all rules that matched threw
+    # fail with ConfusionError if no rules match
+    # fail with ValueError if all rules that matched threw
     def analyze(self, ast):
         errors = []
         for rule in self.rules:
@@ -55,14 +59,16 @@ class Checker:
             raise ValueError(
                 'Typechecking failed. TODO pretty-print this: ' +
                 str(errors))
+        raise ConfusionError(
+            'TODO pretty-print this: ' +
+            str(self.rules) +
+            P.pretty(P.explode(ast)))
 
     def check(self, ast):
         import z3
 
-        self.push()
         self.analyze(ast)
         F = U.to_quantified_z3(self.state)
-        self.undo()
 
         print('F =', F)
         s = z3.Solver()
@@ -111,28 +117,12 @@ assign = make_rule('_a = _b', assignment, 'assign')
 if __name__ == '__main__':
     lit_True = make_rule('True', lambda self: T.BLit(True), 'lit_True')
     lit_False = make_rule('False', lambda self: T.BLit(False), 'lit_False')
-
-    bool_or = make_rule('_a or _b', binary_recursion(T.Or), 'bool_or')
-    bool_and = make_rule('_a and _b', binary_recursion(T.And), 'bool_and')
-    bool_not = make_rule('not _a', unary_recursion(T.Not), 'bool_not')
-    test = make_rule('_a = _b', lambda self, a, b: (a, self.analyze(b)), 'test')
-    # TODO: bool_not is not in the list of rules. how to handle nicely?
-    # maybe just return a bottom type if none of the patterns match?
-    # that way if used for a recursive call, the bottom will get propagated
-    # make None be the bottom type, then any call to analyze that doesn't
-    # explicitly return must automagically return None
-    c = Checker([module, lit_True, lit_False, bool_or, bool_and, test])
-    c.check(A.parse('a = False or not True'))
-    print('-' * 100)
-
-    c = Checker([module, lit_True, lit_False, bool_or, bool_and, bool_not, test])
-    c.check(A.parse('a = (True or False) and (False or not True)\nb = False'))
-    print('-' * 100)
-
+    bool_not = expression(
+        'not _a', {'a': T.BVar(T.TVar('a'))}, T.Not(T.BVar(T.TVar('a'))), 'bool_not')
     bool_or = expression(
         '_a or _b',
         {'a': T.BVar(T.TVar('a')), 'b': T.BVar(T.TVar('b'))},
         T.Or(T.BVar(T.TVar('a')), T.BVar(T.TVar('b'))),
         'bool_or')
-    c = Checker([module, assign, lit_True, lit_False, bool_or])
-    c.check(A.parse('a = True or (False or True)'))
+    c = Checker([module, assign, lit_True, lit_False, bool_or, bool_not])
+    c.check(A.parse('a = True or not False'))
