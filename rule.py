@@ -3,20 +3,17 @@ import nptype as T
 import pattern as P
 import state as S
 
+# pattern + action
+# names of arguments to action should match names of capture groups in pattern
 class Rule:
-    def __init__(self, pattern, captures, returns=None, forces={}):
+    def __init__(self, pattern, action):
         self.s = pattern
         self.pattern = P.make_pattern(pattern)
-        self.captures = captures
-        self.returns = returns
-        self.forces = forces
+        self.f = action
 
-    def __str__(self):
-        return '{} |- {}{}{}'.format(
-            U.typedict(self.captures),
-            self.s,
-            ('' if self.returns is None else ' : {}'.format(self.returns)),
-            ('' if self.forces == {} else ' => {}'.format(U.typedict(self.forces))))
+    # def run(self, ast):
+
+# action combinators?
 
 if __name__ == '__main__':
     rules = [
