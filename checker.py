@@ -149,14 +149,21 @@ if __name__ == '__main__':
         [(context, T.ALit(int(num.n)))], 'lit_num')
     int_add = binary_operator('+', T.AVar, T.Add, 'int_add')
     int_mul = binary_operator('*', T.AVar, T.Mul, 'int_mul')
+    arr_zeros = expression(
+        'np.zeros(_a)',
+        {'a': T.AVar(T.TVar('a'))},
+        T.Array([T.AVar(T.TVar('a'))]),
+        'arr_zeros')
 
     c = Checker([
         module, assign,
         lit_None, lit_True, lit_False,
         lit_num, int_add, int_mul,
-        bool_or, bool_and, bool_not])
+        bool_or, bool_and, bool_not,
+        arr_zeros])
     c.check(A.parse('''
 a = True or False
 a = not False
 b = (1 + 1) * (1 + 1 + 1)
+c = np.zeros(3)
 ''')) #\na = a and False')) #\na = None'))
