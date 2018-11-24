@@ -137,9 +137,18 @@ if __name__ == '__main__':
     lit_False = Rule(P.make_pattern('False'), lambda checker, context:
         [(context, T.BLit(False))], 'lit_False')
     bool_or = binary_operator('or', T.Or, 'bool_or')
+    bool_and = binary_operator('and', T.And, 'bool_and')
+    bool_not = expression(
+        'not _a',
+        {'a': T.BVar(T.TVar('a'))},
+        T.Not(T.BVar(T.TVar('a'))),
+        'bool_not')
 
-    c = Checker([module, assign, lit_None, lit_True, lit_False, bool_or])
-    c.check(A.parse('a = True or False\na = None')) #\na = a and False')) #\na = None'))
+    c = Checker([
+        module, assign,
+        lit_None, lit_True, lit_False,
+        bool_or, bool_and, bool_not])
+    c.check(A.parse('a = True or False\na = not False')) #\na = a and False')) #\na = None'))
 
 #def make_rule(s, f, name=None):
 #    return Rule(P.make_pattern(s), f, name)
