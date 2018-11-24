@@ -124,6 +124,7 @@ def expression(s, assumptions, return_type, name=None):
                  {v.name for v in return_type.vars()})
         def loop(context, pairs, analyzed):
             if pairs == []:
+                # TODO better way of naming
                 renaming = dict(zip(names, T.fresh_ids))
                 instantiate = lambda t: t.renamed(renaming).flipped()
                 for name, inferred_type in analyzed:
@@ -143,7 +144,7 @@ def binary_operator(op, v, f, name=None):
     return expression(
         '_a {} _b'.format(op), 
         {'a': v(T.parse('a')), 'b': v(T.parse('b'))},
-        f(v(T.parse('a')), v(T.parse('a'))),
+        f(v(T.parse('a')), v(T.parse('b'))),
         name)
 
 def ident(self, context, a):
@@ -194,10 +195,12 @@ if __name__ == '__main__':
 #e = add_row(d)
 #f = smush(d, e)
 
-if False:
-    a = True
+n = 1
+m = 1
+if True:
+    n = n + 1
 else:
-    a = np.zeros(3)
-    b = np.zeros(4)
-    c = smush(a, b)
+    m = m + 1
+a = np.zeros(n + m)
+b = smush(a, np.zeros(3))
 ''')) #\na = a and False')) #\na = None'))
