@@ -68,6 +68,7 @@ class Checker:
         state = S.State([s for s, _ in pairs])
         F = U.to_quantified_z3(state)
 
+        print('state =', state)
         print('F =', F)
         s = z3.Solver()
         s.add(F)
@@ -78,68 +79,76 @@ class Checker:
 
 # -------------------- basic type-checking rules --------------------
 
-if __name__ == '__main__':
-    def analyze_module(checker, context, body):
-        if body == []:
-            return [(context, None)]
-        h, t = body[0], body[1:]
-        result = checker.analyze([context], h, lambda checker, new_context, _:
-            analyze_module(checker, new_context, t))
-        return result
-    module = Rule(P.raw_pattern('__body'), analyze_module, 'module')
+def module_action(self, context, body):
+    if body == []:
+        return [(context, None)]
+    h, t = body[0], body[1:]
+    result = self.analyze([context], h, lambda self, new_context, _:
+        module_action(self, new_context, t))
+    return result
+module = Rule(P.raw_pattern('__body'), module_action, 'module')
 
-    def assignment(checker, context, lhs, rhs):
-        assert type(lhs) is A.Name
-        def k(checker, new_context, new_t):
-            if lhs.id in new_context:
-                old_t = new_context.typeof(lhs.id)
-                if not (isinstance(old_t, T.AExp) and isinstance(new_t, T.AExp) or
-                        isinstance(old_t, T.BExp) and isinstance(new_t, T.BExp)):
-                    new_context.unify(old_t, new_t)
-            new_context.annotate(lhs.id, new_t)
-            return [(new_context, None)]
-        result = checker.analyze([context], rhs, k)
-        return result
-    assign = Rule(P.make_pattern('_lhs = _rhs'), assignment, 'assign')
+def assignment(self, context, lhs, rhs):
+    assert type(lhs) is A.Name
+    def k(self, new_context, new_t):
+        if lhs.id in new_context:
+            old_t = new_context.typeof(lhs.id)
+            if not (isinstance(old_t, T.AExp) and isinstance(new_t, T.AExp) or
+                    isinstance(old_t, T.BExp) and isinstance(new_t, T.BExp)):
+                new_context.unify(old_t, new_t)
+        new_context.annotate(lhs.id, new_t)
+        return [(new_context, None)]
+    result = self.analyze([context], rhs, k)
+    return result
+assign = Rule(P.make_pattern('_lhs = _rhs'), assignment, 'assign')
 
-    # given a pattern string s, and assumptions about the types of each capture group,
-    # return return_type
-    def expression(s, assumptions, return_type, name=None):
-        def f(checker, context, **kwargs):
-            names = ({v.name for _, t in assumptions.items() for v in t.vars()} |
-                     {v.name for v in return_type.vars()})
-            analyzed = dict((a, self.analyze(ast)) for a, ast in kwargs.items())
-            for c in self.state:
-                # need fresh variables for each possible context
+# given a pattern string s, and assumptions about the types of each capture group,
+# return return_type
+def expression(s, assumptions, return_type, name=None):
+    def f(self, context, **kwargs):
+        names = ({v.name for _, t in assumptions.items() for v in t.vars()} |
+                 {v.name for v in return_type.vars()})
+        def loop(self, context, pairs, analyzed):
+            if pairs == []:
                 renaming = dict(zip(names, T.fresh_ids))
-                for a, t in analyzed:
-                    c.unify(t, assumptions[a].renamed(renaming).flipped())
-            return return_type
-        return Rule(P.make_pattern(s), f, name)
+                instantiate = lambda t: t.renamed(renaming).flipped()
+                for name, inferred_type in analyzed:
+                    context.unify(inferred_type, instantiate(assumptions[name]))
+                return [(context, instantiate(return_type))]
+            (name, ast), tail = pairs[0], pairs[1:]
+            return self.analyze([context], ast, lambda self, new_context, inferred_type:
+                loop(self, new_context, tail, analyzed + [(name, inferred_type)]))
+        return loop(self, context, list(kwargs.items()), [])
+    return Rule(P.make_pattern(s), f, name)
 
+# binary infix operator op and corresponding type constructor f
+def binary_operator(op, f, name=None):
+    return expression(
+        '_a {} _b'.format(op), 
+        {'a': T.BVar(T.TVar('a')), 'b': T.BVar(T.TVar('b'))},
+        f(T.BVar(T.TVar('a')), T.BVar(T.TVar('b'))),
+        name)
+
+if __name__ == '__main__':
+    lit_None = Rule(P.make_pattern('None'), lambda checker, context:
+        [(context, T.TNone())], 'lit_None')
     lit_True = Rule(P.make_pattern('True'), lambda checker, context:
         [(context, T.BLit(True))], 'lit_True')
     lit_False = Rule(P.make_pattern('False'), lambda checker, context:
         [(context, T.BLit(False))], 'lit_False')
+    bool_or = binary_operator('or', T.Or, 'bool_or')
 
-    c = Checker([module, assign, lit_True])
-    c.check(A.parse('a = True')) #\na = a and False')) #\na = None'))
+    c = Checker([module, assign, lit_None, lit_True, lit_False, bool_or])
+    c.check(A.parse('a = True or False\na = None')) #\na = a and False')) #\na = None'))
 
 #def make_rule(s, f, name=None):
 #    return Rule(P.make_pattern(s), f, name)
 #
 #
-## binary infix operator op and corresponding type constructor f
-#def binary_operator(op, f, name=None):
-#    return expression(
-#        '_a {} _b'.format(op), 
-#        {'a': T.BVar(T.TVar('a')), 'b': T.BVar(T.TVar('b'))},
-#        f(T.BVar(T.TVar('a')), T.BVar(T.TVar('b'))),
-#        name)
 #
-#def analyze_module(self, body):
+#def module_action(self, body):
 #    for a in body:
 #        self.analyze(a)
-#module = Rule(P.raw_pattern('__body'), analyze_module, 'module')
+#module = Rule(P.raw_pattern('__body'), module_action, 'module')
 #
 ## TODO: special cases e.g. 1, 2, 3, ... => type is int
