@@ -194,8 +194,10 @@ if __name__ == '__main__':
 #e = add_row(d)
 #f = smush(d, e)
 
-if True:
+if False:
     a = True
 else:
-    a = False
+    a = np.zeros(3)
+    b = np.zeros(4)
+    c = smush(a, b)
 ''')) #\na = a and False')) #\na = None'))
