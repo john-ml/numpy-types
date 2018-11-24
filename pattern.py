@@ -76,6 +76,12 @@ def matches(pattern, query):
     # ignore .context (don't care whether is Load or Store)
     if type(pattern) is ast.Name:
         return {} if pattern.id == query.id else None
+   
+    # capture multiple subscripts in 1 variable
+    if type(pattern) is type(query) is ast.Index and \
+       type(pattern.value) is ast.Name and \
+       pattern.value.id.startswith('__'):
+        return { pattern.value.id[2:]: query.value }
 
     if type(pattern) is list:
         if len(pattern) == 1 \
@@ -171,3 +177,8 @@ if __name__ == '__main__':
     print(pretty_matches(matches(
         ast.parse('a__Num'),
         ast.parse('3'))))
+    print(pretty_parse('a[1,2,3]'))
+    print(pretty_parse('a[__b]'))
+    print(pretty_matches(matches(
+        ast.parse('_a[__b]'),
+        ast.parse('arr[1, 2, 3, 4, n + 1]'))))

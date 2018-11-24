@@ -1,5 +1,7 @@
-import substitution as S
 import util as U
+import pattern as P
+import ast as A
+import substitution as S
 import z3
 
 # infinite stream of fresh identifiers
@@ -445,6 +447,54 @@ def unify(a, b, σ):
 
     return σ
 
+def parse(s):
+    name2var = lambda name: (EVar(name.id[1:]) if name.id[0] == '_' else TVar(name.id))
+    rules = [
+        ('a__Num', lambda a: ALit(a.n)),
+
+        ('a__Name + b__Name', lambda a, b: Add(AVar(name2var(a)), AVar(name2var(b)))),
+        ('a__Name + _b', lambda a, b: Add(AVar(name2var(a)), go(b))),
+        ('_a + b__Name', lambda a, b: Add(go(a), AVar(name2var(b)))),
+        ('_a + _b', lambda a, b: Add(go(a), go(b))),
+
+        ('a__Name * b__Name', lambda a, b: Mul(AVar(name2var(a)), AVar(name2var(b)))),
+        ('a__Name * _b', lambda a, b: Mul(AVar(name2var(a)), go(b))),
+        ('_a * b__Name', lambda a, b: Mul(go(a), AVar(name2var(b)))),
+        ('_a * _b', lambda a, b: Mul(go(a), go(b))),
+
+        ('a__Name and b__Name', lambda a, b: And(BVar(name2var(a)), BVar(name2var(b)))),
+        ('a__Name and _b', lambda a, b: And(BVar(name2var(a)), go(b))),
+        ('_a and b__Name', lambda a, b: And(go(a), BVar(name2var(b)))),
+        ('_a and _b', lambda a, b: And(go(a), go(b))),
+
+        ('a__Name or b__Name', lambda a, b: Or(BVar(name2var(a)), BVar(name2var(b)))),
+        ('a__Name or _b', lambda a, b: Or(BVar(name2var(a)), go(b))),
+        ('_a or b__Name', lambda a, b: Or(go(a), BVar(name2var(b)))),
+        ('_a or _b', lambda a, b: Or(go(a), go(b))),
+
+        ('not a__Name', lambda a: Not(BVar(name2var(a)))),
+        ('not _a', lambda a: Not(go(a))),
+
+        ('a__Name', lambda a: name2var(a)),
+        ('int(a__Name)', lambda a: AVar(name2var(a))),
+        ('bool(a__Name)', lambda a: BVar(name2var(a))),
+
+        ('array[__a]', lambda a: Array(
+            [go(i) for i in a.elts] if type(a) is A.Tuple else
+            [go(a)])),
+        ('True', lambda: BLit(True)),
+        ('False', lambda: BLit(False))]
+    def go(ast):
+        for s, action in rules:
+            matches = P.matches(P.make_pattern(s), ast)
+            if matches is not None:
+                return action(**matches)
+        else:
+            raise ValueError('Failed to parse ast node: ' + P.pretty(P.explode(ast)))
+
+    ast = A.parse(s.replace('?', '_')).body[0].value
+    return go(ast)
+
 # --------------------------------------------------------------------------------
 
 if __name__ == '__main__':
@@ -494,3 +544,5 @@ if __name__ == '__main__':
     s1 = z3.Solver()
     F1 = U.to_quantified_z3(σ)
     print(F1)
+
+    print(parse('array[?n + 1 + m*(n+3), 1, 2, True, False, int(?a), bool(a)]'))
