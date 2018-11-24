@@ -73,8 +73,8 @@ class Context:
 
 # multiple possible Contexts + ability to branch on new conditions
 class State:
-    def __init__(self):
-        self.contexts = [Context()]
+    def __init__(self, contexts = None):
+        self.contexts = [Context()] if contexts is None else contexts
 
     def __str__(self):
         return '\n'.join(str(a) for a in self.contexts)
@@ -131,7 +131,7 @@ class State:
             c.annotate(a, t)
         return self
 
-    def typeof(self, a):
+    def typesof(self, a):
         return [c.typeof(a) for c in self.contexts]
 
     def find(self, a):
