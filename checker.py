@@ -23,10 +23,10 @@ class Checker:
         self.rules = rules
 
     # try each of the rules in order and run action corresponding to first matching rule
-    # Checker * [Context] * AST * (Checker * Context * a -> [Context * b]) -> [Context * b]
+    # Checker * [Context] * AST * (Context * a -> [Context * b]) -> [Context * b]
     # fail with ConfusionError if no rules match
     # fail with ValueError if all rules that matched threw
-    def analyze(self, contexts, ast, f = lambda self, s, a: [(s, a)]):
+    def analyze(self, contexts, ast, f = lambda s, a: [(s, a)]):
         #if type(ast) is A.Name:
         #    if ast.id in self.state:
         #        # to read from the variable ast.id, all possible types must be equivalent
@@ -45,7 +45,7 @@ class Checker:
                     if matches is None:
                         continue
                     new_pairs = rule.action(self, context.copy(), **matches)
-                    new_pairs = [b for s, a in new_pairs for b in f(self, s, a)]
+                    new_pairs = [b for s, a in new_pairs for b in f(s, a)]
                     pairs.extend(new_pairs)
                     break
                 except ValueError as e:
@@ -83,14 +83,14 @@ def module_action(self, context, body):
     if body == []:
         return [(context, None)]
     h, t = body[0], body[1:]
-    result = self.analyze([context], h, lambda self, new_context, _:
+    result = self.analyze([context], h, lambda new_context, _:
         module_action(self, new_context, t))
     return result
 module = Rule(P.raw_pattern('__body'), module_action, 'module')
 
 def assignment(self, context, lhs, rhs):
     assert type(lhs) is A.Name
-    def k(self, new_context, new_t):
+    def k(new_context, new_t):
         if lhs.id in new_context:
             old_t = new_context.typeof(lhs.id)
             if not (isinstance(old_t, T.AExp) and isinstance(new_t, T.AExp) or
@@ -108,7 +108,7 @@ def expression(s, assumptions, return_type, name=None):
     def f(self, context, **kwargs):
         names = ({v.name for _, t in assumptions.items() for v in t.vars()} |
                  {v.name for v in return_type.vars()})
-        def loop(self, context, pairs, analyzed):
+        def loop(context, pairs, analyzed):
             if pairs == []:
                 renaming = dict(zip(names, T.fresh_ids))
                 instantiate = lambda t: t.renamed(renaming).flipped()
@@ -116,9 +116,9 @@ def expression(s, assumptions, return_type, name=None):
                     context.unify(inferred_type, instantiate(assumptions[name]))
                 return [(context, instantiate(return_type))]
             (name, ast), tail = pairs[0], pairs[1:]
-            return self.analyze([context], ast, lambda self, new_context, inferred_type:
-                loop(self, new_context, tail, analyzed + [(name, inferred_type)]))
-        return loop(self, context, list(kwargs.items()), [])
+            return self.analyze([context], ast, lambda new_context, inferred_type:
+                loop(new_context, tail, analyzed + [(name, inferred_type)]))
+        return loop(context, list(kwargs.items()), [])
     return Rule(P.make_pattern(s), f, name)
 
 # binary infix operator op and corresponding type constructor f
@@ -128,6 +128,8 @@ def binary_operator(op, f, name=None):
         {'a': T.BVar(T.TVar('a')), 'b': T.BVar(T.TVar('b'))},
         f(T.BVar(T.TVar('a')), T.BVar(T.TVar('b'))),
         name)
+
+## TODO: special cases e.g. 1, 2, 3, ... => type is int
 
 if __name__ == '__main__':
     lit_None = Rule(P.make_pattern('None'), lambda checker, context:
@@ -149,15 +151,3 @@ if __name__ == '__main__':
         lit_None, lit_True, lit_False,
         bool_or, bool_and, bool_not])
     c.check(A.parse('a = True or False\na = not False')) #\na = a and False')) #\na = None'))
-
-#def make_rule(s, f, name=None):
-#    return Rule(P.make_pattern(s), f, name)
-#
-#
-#
-#def module_action(self, body):
-#    for a in body:
-#        self.analyze(a)
-#module = Rule(P.raw_pattern('__body'), module_action, 'module')
-#
-## TODO: special cases e.g. 1, 2, 3, ... => type is int
