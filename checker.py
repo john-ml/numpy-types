@@ -145,15 +145,15 @@ if __name__ == '__main__':
         {'a': T.BVar(T.TVar('a'))},
         T.Not(T.BVar(T.TVar('a'))),
         'bool_not')
-    lit_0 = literal('0', T.ALit(0))
-    lit_1 = literal('1', T.ALit(1))
+    lit_num = Rule(P.make_pattern('num__Num'), lambda _, context, num:
+        [(context, T.ALit(int(num.n)))], 'lit_num')
     int_add = binary_operator('+', T.AVar, T.Add, 'int_add')
     int_mul = binary_operator('*', T.AVar, T.Mul, 'int_mul')
 
     c = Checker([
         module, assign,
         lit_None, lit_True, lit_False,
-        lit_0, lit_1, int_add, int_mul,
+        lit_num, int_add, int_mul,
         bool_or, bool_and, bool_not])
     c.check(A.parse('''
 a = True or False

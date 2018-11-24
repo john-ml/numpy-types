@@ -66,6 +66,10 @@ def matches(pattern, query):
     if type(pattern) is ast.Name and pattern.id.startswith('_'):
         return { pattern.id[1:]: query }
 
+    if type(pattern) is ast.Name and '__' in pattern.id and \
+       type(query).__name__ == pattern.id[pattern.id.index('__')+2:]:
+        return { pattern.id[:pattern.id.index('__')]: query }
+
     if type(pattern) is not type(query):
         return None
 
@@ -163,3 +167,7 @@ if __name__ == '__main__':
     print(pretty_matches(matches(
         raw_pattern('__everything'),
         ast.parse('def f(a : int, b : bool) -> bool:\n    pass'))))
+    print(pretty_parse('# hello'))
+    print(pretty_matches(matches(
+        ast.parse('a__Num'),
+        ast.parse('3'))))
