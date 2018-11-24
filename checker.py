@@ -121,33 +121,42 @@ def expression(s, assumptions, return_type, name=None):
         return loop(context, list(kwargs.items()), [])
     return Rule(P.make_pattern(s), f, name)
 
-# binary infix operator op and corresponding type constructor f
-def binary_operator(op, f, name=None):
+def literal(s, t, name=None):
+    return Rule(P.make_pattern(s), lambda _, context: [(context, t)], name)
+
+# binary infix operator op and corresponding variable type v and type constructor f
+def binary_operator(op, v, f, name=None):
     return expression(
         '_a {} _b'.format(op), 
-        {'a': T.BVar(T.TVar('a')), 'b': T.BVar(T.TVar('b'))},
-        f(T.BVar(T.TVar('a')), T.BVar(T.TVar('b'))),
+        {'a': v(T.TVar('a')), 'b': v(T.TVar('b'))},
+        f(v(T.TVar('a')), v(T.TVar('b'))),
         name)
 
 ## TODO: special cases e.g. 1, 2, 3, ... => type is int
 
 if __name__ == '__main__':
-    lit_None = Rule(P.make_pattern('None'), lambda checker, context:
-        [(context, T.TNone())], 'lit_None')
-    lit_True = Rule(P.make_pattern('True'), lambda checker, context:
-        [(context, T.BLit(True))], 'lit_True')
-    lit_False = Rule(P.make_pattern('False'), lambda checker, context:
-        [(context, T.BLit(False))], 'lit_False')
-    bool_or = binary_operator('or', T.Or, 'bool_or')
-    bool_and = binary_operator('and', T.And, 'bool_and')
+    lit_None = literal('None', T.TNone())
+    lit_True = literal('True', T.BLit(True))
+    lit_False = literal('False', T.BLit(False))
+    bool_or = binary_operator('or', T.BVar, T.Or, 'bool_or')
+    bool_and = binary_operator('and', T.BVar, T.And, 'bool_and')
     bool_not = expression(
         'not _a',
         {'a': T.BVar(T.TVar('a'))},
         T.Not(T.BVar(T.TVar('a'))),
         'bool_not')
+    lit_0 = literal('0', T.ALit(0))
+    lit_1 = literal('1', T.ALit(1))
+    int_add = binary_operator('+', T.AVar, T.Add, 'int_add')
+    int_mul = binary_operator('*', T.AVar, T.Mul, 'int_mul')
 
     c = Checker([
         module, assign,
         lit_None, lit_True, lit_False,
+        lit_0, lit_1, int_add, int_mul,
         bool_or, bool_and, bool_not])
-    c.check(A.parse('a = True or False\na = not False')) #\na = a and False')) #\na = None'))
+    c.check(A.parse('''
+a = True or False
+a = not False
+b = (1 + 1) * (1 + 1 + 1)
+''')) #\na = a and False')) #\na = None'))
