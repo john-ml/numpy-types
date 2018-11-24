@@ -70,14 +70,34 @@ class Checker:
 
 # -------------------- basic type-checking rules --------------------
 
-def module_action(self, context, body):
+def process_body(self, context, **kwargs):
+    _, body = list(kwargs.items())[0]
     if body == []:
         return [(context, None)]
     h, t = body[0], body[1:]
     result = self.analyze([context], h, lambda new_context, _:
-        module_action(self, new_context, t))
+        process_body(self, new_context, **{'body': t}))
     return result
-module = Rule(P.raw_pattern('__body'), module_action, 'module')
+
+module = Rule(P.raw_pattern('__body'), process_body, 'module')
+
+def process_conditional(self, context, t, top, bot):
+    top_context = context.copy().assume(t)
+    bot_context = context.copy().assume(T.Not(t))
+    top_results = process_body(self, top_context, **{'body': top})
+    bot_results = process_body(self, bot_context, **{'body': bot})
+    return top_results + bot_results
+
+conditional = Rule(P.make_pattern('''
+if _p:
+    __top
+else:
+    __bot
+'''),
+lambda self, context, p, top, bot:
+    self.analyze([context], p, lambda new_context, t:
+        process_conditional(self, new_context, t, top, bot)),
+'conditional')
 
 def assignment(self, context, lhs, rhs):
     assert type(lhs) is A.Name
@@ -146,7 +166,6 @@ lit_num = Rule(P.make_pattern('num__Num'), lambda _, context, num:
 int_add = binary_operator('+', T.AVar, T.Add, 'int_add')
 int_mul = binary_operator('*', T.AVar, T.Mul, 'int_mul')
 
-
 if __name__ == '__main__':
     arr_zeros = expression('np.zeros(_a)', {'a': 'int(a)'}, 'array[int(a)]', 'arr_zeros')
     add_row = expression('add_row(_a)', {'a': 'array[int(a)]'}, 'array[int(a) + 1]', 'add_row')
@@ -163,13 +182,20 @@ if __name__ == '__main__':
         arr_zeros,
         add_row,
         identifier,
-        smush])
+        smush,
+        conditional])
     c.check(A.parse('''
-a = True or False
-a = not False
-b = (1 + 1) * (1 + 1 + 1)
-c = np.zeros(3)
-d = add_row(np.zeros(3))
-e = add_row(d)
-f = smush(d, e)
+#a = True or False
+#a = not False
+#b = (1 + 1) * (1 + 1 + 1)
+#c = np.zeros(3)
+
+#d = add_row(np.zeros(3))
+#e = add_row(d)
+#f = smush(d, e)
+
+if True:
+    a = True
+else:
+    a = False
 ''')) #\na = a and False')) #\na = None'))
