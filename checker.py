@@ -105,6 +105,9 @@ assign = Rule(P.make_pattern('_lhs = _rhs'), assignment, 'assign')
 # given a pattern string s, and assumptions about the types of each capture group,
 # return return_type
 def expression(s, assumptions, return_type, name=None):
+    to_type = lambda a: (T.parse(a) if type(a) is str else a)
+    assumptions = dict((k, to_type(v)) for k, v in assumptions.items())
+    return_type = to_type(return_type)
     def f(self, context, **kwargs):
         names = ({v.name for _, t in assumptions.items() for v in t.vars()} |
                  {v.name for v in return_type.vars()})
@@ -128,8 +131,8 @@ def literal(s, t, name=None):
 def binary_operator(op, v, f, name=None):
     return expression(
         '_a {} _b'.format(op), 
-        {'a': v(T.TVar('a')), 'b': v(T.TVar('b'))},
-        f(v(T.TVar('a')), v(T.TVar('b'))),
+        {'a': v(T.parse('a')), 'b': v(T.parse('b'))},
+        f(v(T.parse('a')), v(T.parse('a'))),
         name)
 
 ## TODO: special cases e.g. 1, 2, 3, ... => type is int
@@ -140,20 +143,12 @@ if __name__ == '__main__':
     lit_False = literal('False', T.BLit(False))
     bool_or = binary_operator('or', T.BVar, T.Or, 'bool_or')
     bool_and = binary_operator('and', T.BVar, T.And, 'bool_and')
-    bool_not = expression(
-        'not _a',
-        {'a': T.BVar(T.TVar('a'))},
-        T.Not(T.BVar(T.TVar('a'))),
-        'bool_not')
+    bool_not = expression('not _a', {'a': 'bool(a)'}, 'not bool(a)', 'bool_not')
     lit_num = Rule(P.make_pattern('num__Num'), lambda _, context, num:
         [(context, T.ALit(int(num.n)))], 'lit_num')
     int_add = binary_operator('+', T.AVar, T.Add, 'int_add')
     int_mul = binary_operator('*', T.AVar, T.Mul, 'int_mul')
-    arr_zeros = expression(
-        'np.zeros(_a)',
-        {'a': T.AVar(T.TVar('a'))},
-        T.Array([T.AVar(T.TVar('a'))]),
-        'arr_zeros')
+    arr_zeros = expression('np.zeros(_a)', {'a': 'int(a)'}, 'array[int(a)]', 'arr_zeros')
 
     c = Checker([
         module, assign,
