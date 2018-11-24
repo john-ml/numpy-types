@@ -27,15 +27,6 @@ class Checker:
     # fail with ConfusionError if no rules match
     # fail with ValueError if all rules that matched threw
     def analyze(self, contexts, ast, f = lambda s, a: [(s, a)]):
-        #if type(ast) is A.Name:
-        #    if ast.id in self.state:
-        #        # to read from the variable ast.id, all possible types must be equivalent
-        #        fresh = T.EVar(next(T.fresh_ids))
-        #        for c in self.state:
-        #            c.unify(fresh, c.typeof(ast.id))
-        #        return fresh
-        #    else:
-        #        raise ValueError('Unbound identifier: ' + ast.id)
         pairs = []
         for context in contexts:
             errors = []
@@ -135,30 +126,50 @@ def binary_operator(op, v, f, name=None):
         f(v(T.parse('a')), v(T.parse('a'))),
         name)
 
-## TODO: special cases e.g. 1, 2, 3, ... => type is int
+def ident(self, context, a):
+    name = a.id
+    if name not in context:
+        raise ConfusionError('Unbound identifier: ' + name)
+    return [(context, context.typeof(name))]
+identifier = Rule(P.make_pattern('a__Name'), ident, 'identifier')
+
+lit_None = literal('None', T.TNone())
+lit_True = literal('True', T.BLit(True))
+lit_False = literal('False', T.BLit(False))
+
+bool_or = binary_operator('or', T.BVar, T.Or, 'bool_or')
+bool_and = binary_operator('and', T.BVar, T.And, 'bool_and')
+bool_not = expression('not _a', {'a': 'bool(a)'}, 'not bool(a)', 'bool_not')
+
+lit_num = Rule(P.make_pattern('num__Num'), lambda _, context, num:
+    [(context, T.ALit(int(num.n)))], 'lit_num')
+int_add = binary_operator('+', T.AVar, T.Add, 'int_add')
+int_mul = binary_operator('*', T.AVar, T.Mul, 'int_mul')
+
 
 if __name__ == '__main__':
-    lit_None = literal('None', T.TNone())
-    lit_True = literal('True', T.BLit(True))
-    lit_False = literal('False', T.BLit(False))
-    bool_or = binary_operator('or', T.BVar, T.Or, 'bool_or')
-    bool_and = binary_operator('and', T.BVar, T.And, 'bool_and')
-    bool_not = expression('not _a', {'a': 'bool(a)'}, 'not bool(a)', 'bool_not')
-    lit_num = Rule(P.make_pattern('num__Num'), lambda _, context, num:
-        [(context, T.ALit(int(num.n)))], 'lit_num')
-    int_add = binary_operator('+', T.AVar, T.Add, 'int_add')
-    int_mul = binary_operator('*', T.AVar, T.Mul, 'int_mul')
     arr_zeros = expression('np.zeros(_a)', {'a': 'int(a)'}, 'array[int(a)]', 'arr_zeros')
+    add_row = expression('add_row(_a)', {'a': 'array[int(a)]'}, 'array[int(a) + 1]', 'add_row')
+    smush = expression(
+        'smush(_a, _b)',
+        {'a': 'array[int(a)]', 'b': 'array[int(a)]'},
+        'array[int(a)]', 'smush')
 
     c = Checker([
         module, assign,
         lit_None, lit_True, lit_False,
         lit_num, int_add, int_mul,
         bool_or, bool_and, bool_not,
-        arr_zeros])
+        arr_zeros,
+        add_row,
+        identifier,
+        smush])
     c.check(A.parse('''
 a = True or False
 a = not False
 b = (1 + 1) * (1 + 1 + 1)
 c = np.zeros(3)
+d = add_row(np.zeros(3))
+e = add_row(d)
+f = smush(d, e)
 ''')) #\na = a and False')) #\na = None'))
