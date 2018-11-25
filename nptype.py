@@ -611,3 +611,5 @@ if __name__ == '__main__':
 
     try_unify(parse('array[a, b, c]'), parse('array[d]'), σ)
     try_unify(parse('(a, b, c)'), parse('(d, e)'), σ)
+    try_unify(parse('Fun(True, False)'), parse('Fun(False, False)'), σ)
+    try_unify(parse('Fun(array[n], array[n + 1])'), parse('Fun(array[n], array[1 + n])'), σ)
