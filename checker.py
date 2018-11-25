@@ -43,13 +43,10 @@ class Checker:
                     errors.append(e)
             else:
                 if errors == []:
-                    raise ConfusionError(
-                        'TODO pretty-print this: ' +
-                        str(self.rules) +
-                        P.pretty(P.explode(ast)))
-                raise ValueError(
-                    'TODO pretty-print this: ' +
-                    str(errors))
+                    raise ConfusionError('No applicable rule for:\n' + P.pretty(P.explode(ast)))
+                raise ValueError('No applicable rule for:\n{}\nReasons:\n{}'.format(
+                    P.pretty(P.explode(ast)),
+                    '\n'.join(['  ' + l for e in errors for l in str(e).split('\n')])))
         return pairs
 
     def check(self, ast):
@@ -191,16 +188,19 @@ if __name__ == '__main__':
 #b = (1 + 1) * (1 + 1 + 1)
 #c = np.zeros(3)
 
+a = True
+a = None
+
 #d = add_row(np.zeros(3))
 #e = add_row(d)
 #f = smush(d, e)
 
-n = 1
-m = 1
-if False:
-    n = n + 1
-else:
-    m = m + 1
-a = np.zeros(n + m)
-b = smush(a, np.zeros(3))
+#n = 1
+#m = 1
+#if False:
+#    n += 1
+#else:
+#    m = m + 1
+#a = np.zeros(n + m)
+#b = smush(a, np.zeros(3))
 ''')) #\na = a and False')) #\na = None'))
