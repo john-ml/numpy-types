@@ -63,7 +63,7 @@ class Substitution:
         return self
 
     def equal_pairs(self):
-        return self.equalities | {(a, self.find(a)) for a in self.m}
+        return set(self.equalities)
 
     def extract_sets(self, predicate):
         return set(U.reducemap(U.union, U.to_z3,
@@ -77,11 +77,12 @@ class Substitution:
         return self.extract_sets(U.tvars)
 
     # convert equality constraints to z3 formula
-    # assumes items implement .to_z3, .evars, .tvars
+    # assumes items implement .to_z3, .evars, .tvars, .under
     # TODO: move this out of Substitution?
     def to_z3(self):
         import z3
-        return z3.And([l.to_z3() == r.to_z3() for l, r in self.equal_pairs()])
+        return z3.And([l.under(self).to_z3() == r.under(self).to_z3() \
+            for l, r in self.equal_pairs()])
 
 if __name__ == '__main__':
     σ = Substitution(lambda a, b: a < b)

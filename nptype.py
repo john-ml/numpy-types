@@ -444,7 +444,6 @@ def unify(a, b, σ):
         if len(a.shape) != len(b.shape):
             raise U.cant_unify(a, b, 'shapes are of unequal length')
         for l, r in zip(a.shape, b.shape):
-            print(l, r)
             unify(l, r, σ)
         return σ
 
@@ -517,11 +516,14 @@ if __name__ == '__main__':
     print(t.fresh())
     print(t.fresh().flipped())
 
-    def try_unify(*args):
+    def try_unify(a, b, σ):
         try:
-            print(unify(*args))
+            print(a, '~', b)
+            print(unify(a, b, σ))
         except ValueError as e:
             print(e)
+        finally:
+            print()
 
     σ = S.Substitution(lambda a, b: a << b)
     try_unify(TVar('a'), TVar('b'), σ)
@@ -539,14 +541,10 @@ if __name__ == '__main__':
     print(σ.evars(), σ.tvars())
     print(z3.simplify(F))
     s = z3.Solver()
-    F = z3.ForAll(list(σ.tvars()), z3.Exists(list(σ.evars()), F))
+    F = U.to_quantified_z3(σ)
     print(F)
     s.add(F)
     print(s.check() == z3.sat)
-
-    s1 = z3.Solver()
-    F1 = U.to_quantified_z3(σ)
-    print(F1)
 
     print(parse('array[?n + 1 + m*(n+3), 1, 2, True, False, int(?a), bool(a)]'))
 
