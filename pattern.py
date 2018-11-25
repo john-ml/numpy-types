@@ -113,9 +113,10 @@ def matches(pattern, query):
     for k in pattern._fields:
         v = pattern.__getattribute__(k)
         v1 = query.__getattribute__(k)
-        # capture function definition name
-        if type(pattern) is ast.FunctionDef and k == 'name' and pattern.name.startswith('_'):
-            v = ast.parse(pattern.name).body[0].value
+        # capture function definition name or argument name
+        if type(pattern) is ast.FunctionDef and k == 'name' and pattern.name.startswith('_') or \
+           type(pattern) is ast.arg and k == 'arg' and pattern.arg.startswith('_'):
+            v = ast.parse(v).body[0].value
         c = matches(v, v1)
         if c is None:
             return None
@@ -125,9 +126,16 @@ def matches(pattern, query):
 
 # extract from code snippet the part of the ast necessary to make a pattern
 # i.e. remove Module node + the Expr node if the pattern is an expression and not a statement
+# and treat a : t as argument annotation, not as an assignment statement
 def make_pattern(s):
     tree = ast.parse(s).body[0]
-    return tree.value if type(tree) is ast.Expr else tree
+    if type(tree) is ast.Expr:
+        return tree.value
+    if type(tree) is ast.AnnAssign:
+        return matches(
+            raw_pattern('def f(__a):\n pass'),
+            ast.parse('def f({}):\n pass'.format(s)))['a'][0]
+    return tree
 
 # treat code snippet as raw pattern (i.e. don't remove unnecessary Module/Expr nodes)
 def raw_pattern(s):
@@ -185,3 +193,5 @@ if __name__ == '__main__':
     print(pretty_matches(matches(
         make_pattern('def _f(__args) -> _return_type:\n    __body'),
         ast.parse('def f(a : int, b : array[a]) -> array[a + 1]:\n    return test').body[0])))
+    print(make_pattern('_a : _t'))
+    print(type(make_pattern('_a : _t')) is ast.arg)

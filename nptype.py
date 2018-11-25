@@ -504,6 +504,41 @@ def unify(a, b, σ):
 
     return σ
 
+def from_arg(ast):
+    name2var = lambda name: (EVar(name.id[1:]) if name.id[0] == '_' else TVar(name.id))
+    to_int = (lambda t:
+        AVar(t) if type(t) in (TVar, AVar) else
+         t if type(t) is ALit else
+         type(t)(to_int(t.a), to_int(t.b)))
+    rules = [
+        ('a__Num', lambda a: ALit(a.n)),
+
+        ('_a + _b', lambda a, b: Add(go(a), go(b))),
+        ('_a * _b', lambda a, b: Mul(go(a), go(b))),
+
+        ('a__Name', lambda a: name2var(a)),
+        ('_a : int', lambda a: (a, AVar(TVar(a)))),
+        ('_a : bool', lambda a: (a, BVar(TVar(a)))),
+        ('_a : _t', lambda a, t: (a, go(t))),
+
+        ('Fun(_a, _b)', lambda a, b: Fun(go(a), go(b))),
+        ('array[__a]', lambda a: Array(
+            [to_int(go(i)) for i in a.elts] if type(a) is A.Tuple else
+            [to_int(go(a))])),
+        ('a__Tuple', lambda a: Tuple([go(i) for i in a.elts])),
+
+        ('True', lambda: BLit(True)),
+        ('False', lambda: BLit(False))]
+    def go(ast):
+        for s, action in rules:
+            matches = P.matches(P.make_pattern(s), ast)
+            if matches is not None:
+                return action(**matches)
+        else:
+            raise ValueError('Failed to parse ast node: ' + P.pretty(P.explode(ast)))
+
+    return go(ast)
+
 def parse(s):
     name2var = lambda name: (EVar(name.id[1:]) if name.id[0] == '_' else TVar(name.id))
     rules = [
@@ -613,3 +648,17 @@ if __name__ == '__main__':
     try_unify(parse('(a, b, c)'), parse('(d, e)'), σ)
     try_unify(parse('Fun(True, False)'), parse('Fun(False, False)'), σ)
     try_unify(parse('Fun(array[n], array[n + 1])'), parse('Fun(array[n], array[1 + n])'), σ)
+
+    arg = P.matches(
+        P.make_pattern('def f(__a):\n pass'),
+        A.parse('def f(a : int):\n pass').body[0])
+    arg = arg['a'][0]
+    print(P.pretty(P.explode(arg)))
+    print(from_arg(arg), str(from_arg(arg)[1]))
+
+    arg = P.matches(
+        P.make_pattern('def f(__a):\n pass'),
+        A.parse('def f(a : array[1 + n]):\n pass').body[0])
+    arg = arg['a'][0]
+    print(P.pretty(P.explode(arg)))
+    print(from_arg(arg), str(from_arg(arg)[1]))
