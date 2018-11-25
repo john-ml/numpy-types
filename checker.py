@@ -19,11 +19,16 @@ class ConfusionError(Exception):
 
 # type-checker acting on a set of checking rules
 class Checker:
-    def __init__(self, rules):
+    def __init__(self, rules, return_type=T.TNone()):
         self.rules = rules
+        self.return_type = return_type
 
     # try each of the rules in order and run action corresponding to first matching rule
-    # Checker * [Context] * AST * (Context * a -> [Context * b]) -> [Context * b]
+    # Checker
+    # * [Context]
+    # * AST
+    # * (Context * a -> [Context * b])
+    # -> [Context * b]
     # fail with ConfusionError if no rules match
     # fail with ValueError if all rules that matched threw
     def analyze(self, contexts, ast, f = lambda s, a: [(s, a)]):
@@ -33,6 +38,8 @@ class Checker:
             for rule in self.rules:
                 try:
                     matches = P.matches(rule.pattern, ast)
+                    print('matches for', rule.name, '=', matches)
+                    print(P.pretty(P.explode(rule.pattern)), '\n\n\n\n\n', P.pretty(P.explode(ast)))
                     if matches is None:
                         continue
                     new_pairs = rule.action(self, context.copy(), **matches)
@@ -67,22 +74,21 @@ class Checker:
 
 # -------------------- basic type-checking rules --------------------
 
-def process_body(self, context, **kwargs):
+def analyze_body(self, context, **kwargs):
     _, body = list(kwargs.items())[0]
     if body == []:
         return [(context, None)]
     h, t = body[0], body[1:]
-    result = self.analyze([context], h, lambda new_context, _:
-        process_body(self, new_context, **{'body': t}))
-    return result
+    return self.analyze([context], h, lambda new_context, _:
+        analyze_body(self, new_context, **{'body': t}))
 
-module = Rule(P.raw_pattern('__body'), process_body, 'module')
+module = Rule(P.raw_pattern('__body'), analyze_body, 'module')
 
-def process_conditional(self, context, t, top, bot):
+def analyze_conditional(self, context, t, top, bot):
     top_context = context.copy().assume(t)
     bot_context = context.copy().assume(T.Not(t))
-    top_results = process_body(self, top_context, **{'body': top})
-    bot_results = process_body(self, bot_context, **{'body': bot})
+    top_results = analyze_body(self, top_context, **{'body': top})
+    bot_results = analyze_body(self, bot_context, **{'body': bot})
     return top_results + bot_results
 
 conditional = Rule(P.make_pattern('''
@@ -93,7 +99,7 @@ else:
 '''),
 lambda self, context, p, top, bot:
     self.analyze([context], p, lambda new_context, t:
-        process_conditional(self, new_context, t, top, bot)),
+        analyze_conditional(self, new_context, t, top, bot)),
 'conditional')
 
 def assignment(self, context, lhs, rhs):
@@ -106,8 +112,7 @@ def assignment(self, context, lhs, rhs):
                 new_context.unify(old_t, new_t)
         new_context.annotate(lhs.id, new_t)
         return [(new_context, None)]
-    result = self.analyze([context], rhs, k)
-    return result
+    return self.analyze([context], rhs, k)
 assign = Rule(P.make_pattern('_lhs = _rhs'), assignment, 'assign')
 
 # given a pattern string s, and assumptions about the types of each capture group,
@@ -151,6 +156,19 @@ def ident(self, context, a):
     return [(context, context.typeof(name))]
 identifier = Rule(P.make_pattern('a__Name'), ident, 'identifier')
 
+def fundef(self, context, f, args, return_type, body):
+    for arg in args:
+        context.annotate(arg.arg, T.from_ast(arg.annotation))
+    context.annotate(f, T.Fun(T.Tuple(arg_types), return_type))
+    return analyze_body(
+        Checker(self.rules, return_type=return_type),
+        context,
+        **{'body': body})
+
+function_definition = Rule(P.make_pattern('''
+def _f(__args) -> _return_type:
+    __body'''), fundef, 'function_definition')
+
 lit_None = literal('None', T.TNone())
 lit_True = literal('True', T.BLit(True))
 lit_False = literal('False', T.BLit(False))
@@ -181,15 +199,16 @@ if __name__ == '__main__':
         add_row,
         identifier,
         smush,
-        conditional])
+        conditional,
+        function_definition])
     c.check(A.parse('''
 #a = True or False
 #a = not False
 #b = (1 + 1) * (1 + 1 + 1)
 #c = np.zeros(3)
 
-a = True
-a = None
+#a = True
+#a = None
 
 #d = add_row(np.zeros(3))
 #e = add_row(d)
@@ -203,4 +222,7 @@ a = None
 #    m = m + 1
 #a = np.zeros(n + m)
 #b = smush(a, np.zeros(3))
-''')) #\na = a and False')) #\na = None'))
+
+def f(a: int, b: array[a]) -> array[a + 1]:
+    return smush(np.zeros(a + 1), add_row(b))
+'''))

@@ -113,6 +113,9 @@ def matches(pattern, query):
     for k in pattern._fields:
         v = pattern.__getattribute__(k)
         v1 = query.__getattribute__(k)
+        # capture function definition name
+        if type(pattern) is ast.FunctionDef and k == 'name' and pattern.name.startswith('_'):
+            v = ast.parse(pattern.name).body[0].value
         c = matches(v, v1)
         if c is None:
             return None
@@ -168,9 +171,6 @@ if __name__ == '__main__':
     print(pretty_parse('def f(a : int, b : bool) -> bool:\n    pass'))
     print(pretty_parse('def f(__a) -> bool:\n    pass'))
     print(pretty_matches(matches(
-        make_pattern('def f(__args) -> _return_type:\n    __body'),
-        ast.parse('def f(a : int, b : bool) -> bool:\n    pass').body[0])))
-    print(pretty_matches(matches(
         raw_pattern('__everything'),
         ast.parse('def f(a : int, b : bool) -> bool:\n    pass'))))
     print(pretty_parse('# hello'))
@@ -182,3 +182,6 @@ if __name__ == '__main__':
     print(pretty_matches(matches(
         ast.parse('_a[__b]'),
         ast.parse('arr[1, 2, 3, 4, n + 1]'))))
+    print(pretty_matches(matches(
+        make_pattern('def _f(__args) -> _return_type:\n    __body'),
+        ast.parse('def f(a : int, b : array[a]) -> array[a + 1]:\n    return test').body[0])))
