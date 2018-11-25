@@ -38,8 +38,8 @@ class Checker:
             for rule in self.rules:
                 try:
                     matches = P.matches(rule.pattern, ast)
-                    print('matches for', rule.name, '=', matches)
-                    print(P.pretty(P.explode(rule.pattern)), '\n\n\n\n\n', P.pretty(P.explode(ast)))
+                    #print('matches for', rule.name, '=', matches)
+                    #print(P.pretty(P.explode(rule.pattern)), '\n\n\n\n\n', P.pretty(P.explode(ast)))
                     if matches is None:
                         continue
                     new_pairs = rule.action(self, context.copy(), **matches)
@@ -182,6 +182,10 @@ lit_num = Rule(P.make_pattern('num__Num'), lambda _, context, num:
 int_add = binary_operator('+', T.AVar, T.Add, 'int_add')
 int_mul = binary_operator('*', T.AVar, T.Mul, 'int_mul')
 
+ret = Rule(P.make_pattern('return _a'), lambda self, context, a:
+    self.analyze([context], a, lambda new_context, t:
+        [(new_context.unify(self.return_type, t), None)]), 'return')
+
 if __name__ == '__main__':
     arr_zeros = expression('np.zeros(_a)', {'a': 'int(a)'}, 'array[int(a)]', 'arr_zeros')
     add_row = expression('add_row(_a)', {'a': 'array[int(a)]'}, 'array[int(a) + 1]', 'add_row')
@@ -190,7 +194,7 @@ if __name__ == '__main__':
         {'a': 'array[int(a)]', 'b': 'array[int(a)]'},
         'array[int(a)]', 'smush')
 
-    c = Checker([
+    rules = [
         module, assign,
         lit_None, lit_True, lit_False,
         lit_num, int_add, int_mul,
@@ -200,29 +204,55 @@ if __name__ == '__main__':
         identifier,
         smush,
         conditional,
-        function_definition])
-    c.check(A.parse('''
-#a = True or False
-#a = not False
-#b = (1 + 1) * (1 + 1 + 1)
-#c = np.zeros(3)
+        ret,
+        function_definition]
+    c = Checker(rules, return_type=T.parse('array[3]'))
 
-#a = True
-#a = None
+    def try_check(s):
+        try:
+            c.check(A.parse(s))
+        except (ValueError, ConfusionError) as e:
+            print(e)
 
-#d = add_row(np.zeros(3))
-#e = add_row(d)
-#f = smush(d, e)
+    try_check('''
+a = True
+a = None
+''')
 
-#n = 1
-#m = 1
-#if False:
-#    n += 1
-#else:
-#    m = m + 1
-#a = np.zeros(n + m)
-#b = smush(a, np.zeros(3))
+    try_check('''
+d = add_row(np.zeros(3))
+e = add_row(d)
+f = smush(d, e)
+''')
 
+    try_check('''
+a = True or False
+a = not False
+b = (1 + 1) * (1 + 1 + 1)
+c = np.zeros(3)
+''')
+
+    try_check('''
+a = add_row(np.zeros(2))
+return a
+b = np.zeros(3)
+return b
+c = np.zeros(1 + 1 + 1)
+return c
+''')
+
+    try_check('''
+n = 1
+m = 1
+if False:
+    n += 1
+else:
+    m = m + 1
+a = np.zeros(n + m)
+b = smush(a, np.zeros(3))
+''')
+
+    try_check('''
 def f(a: int, b: array[a]) -> array[a + 1]:
     return smush(np.zeros(a + 1), add_row(b))
-'''))
+''')
