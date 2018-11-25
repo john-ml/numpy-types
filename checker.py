@@ -127,7 +127,7 @@ def expression(s, assumptions, return_type, name=None):
         def loop(context, pairs, analyzed):
             if pairs == []:
                 # TODO better way of naming
-                renaming = dict(zip(names, T.fresh_ids))
+                renaming = dict(zip(names, map(lambda a: 'tmp' + a, T.fresh_ids)))
                 instantiate = lambda t: t.renamed(renaming).flipped()
                 for name, inferred_type in analyzed:
                     context.unify(inferred_type, instantiate(assumptions[name]))
@@ -157,11 +157,15 @@ def ident(self, context, a):
 identifier = Rule(P.make_pattern('a__Name'), ident, 'identifier')
 
 def fundef(self, context, f, args, return_type, body):
+    arg_types = []
     for arg in args:
-        context.annotate(arg.arg, T.from_ast(arg.annotation))
-    context.annotate(f, T.Fun(T.Tuple(arg_types), return_type))
+        a, t = T.from_ast(arg)
+        context.annotate(a, t)
+        arg_types.append(t)
+    r = T.from_ast(return_type)
+    context.annotate(f, T.Fun(T.Tuple(arg_types), r))
     return analyze_body(
-        Checker(self.rules, return_type=return_type),
+        Checker(self.rules, return_type=r),
         context,
         **{'body': body})
 
@@ -214,43 +218,43 @@ if __name__ == '__main__':
         except (ValueError, ConfusionError) as e:
             print(e)
 
-    try_check('''
-a = True
-a = None
-''')
-
-    try_check('''
-d = add_row(np.zeros(3))
-e = add_row(d)
-f = smush(d, e)
-''')
-
-    try_check('''
-a = True or False
-a = not False
-b = (1 + 1) * (1 + 1 + 1)
-c = np.zeros(3)
-''')
-
-    try_check('''
-a = add_row(np.zeros(2))
-return a
-b = np.zeros(3)
-return b
-c = np.zeros(1 + 1 + 1)
-return c
-''')
-
-    try_check('''
-n = 1
-m = 1
-if False:
-    n += 1
-else:
-    m = m + 1
-a = np.zeros(n + m)
-b = smush(a, np.zeros(3))
-''')
+#    try_check('''
+#a = True
+#a = None
+#''')
+#
+#    try_check('''
+#d = add_row(np.zeros(3))
+#e = add_row(d)
+#f = smush(d, e)
+#''')
+#
+#    try_check('''
+#a = True or False
+#a = not False
+#b = (1 + 1) * (1 + 1 + 1)
+#c = np.zeros(3)
+#''')
+#
+#    try_check('''
+#a = add_row(np.zeros(2))
+#return a
+#b = np.zeros(3)
+#return b
+#c = np.zeros(1 + 1 + 1)
+#return c
+#''')
+#
+#    try_check('''
+#n = 1
+#m = 1
+#if False:
+#    n = n + 1
+#else:
+#    m = m + 1
+#a = np.zeros(n + m)
+#b = smush(a, np.zeros(3))
+#''')
 
     try_check('''
 def f(a: int, b: array[a]) -> array[a + 1]:

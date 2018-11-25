@@ -504,7 +504,7 @@ def unify(a, b, σ):
 
     return σ
 
-def from_arg(ast):
+def from_ast(ast):
     name2var = lambda name: (EVar(name.id[1:]) if name.id[0] == '_' else TVar(name.id))
     to_int = (lambda t:
         AVar(t) if type(t) in (TVar, AVar) else
@@ -654,11 +654,17 @@ if __name__ == '__main__':
         A.parse('def f(a : int):\n pass').body[0])
     arg = arg['a'][0]
     print(P.pretty(P.explode(arg)))
-    print(from_arg(arg), str(from_arg(arg)[1]))
+    print(from_ast(arg), str(from_ast(arg)[1]))
 
     arg = P.matches(
         P.make_pattern('def f(__a):\n pass'),
         A.parse('def f(a : array[1 + n]):\n pass').body[0])
     arg = arg['a'][0]
     print(P.pretty(P.explode(arg)))
-    print(from_arg(arg), str(from_arg(arg)[1]))
+    print(from_ast(arg), str(from_ast(arg)[1]))
+
+    arg = P.matches(
+        P.make_pattern('def f() -> _r:\n pass'),
+        A.parse('def f() -> array[1 + n]:\n pass').body[0])['r']
+    print(P.pretty(P.explode(arg)))
+    print(from_ast(arg))
