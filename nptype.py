@@ -412,8 +412,11 @@ def unify(a, b, σ):
     a = a.under(σ)
     b = b.under(σ)
 
-    # existential variables always unify
+    # existential variables
     if EVar in (type(a), type(b)):
+        e, t = (a, b) if type(a) is EVar else (b, a)
+        if e in t.evars():
+            raise U.cant_unify(a, b, 'occurs check failed')
         return σ.union(a, b)
 
     # lifted variables
@@ -546,3 +549,6 @@ if __name__ == '__main__':
     print(F1)
 
     print(parse('array[?n + 1 + m*(n+3), 1, 2, True, False, int(?a), bool(a)]'))
+
+    try_unify(parse('?a'), parse('array[?a]'), σ)
+    try_unify(parse('?a'), parse('array[b]'), σ)
