@@ -434,6 +434,28 @@ class Array(Type):
     def flipped(self):
         return Array(a.flipped() for a in self.shape)
 
+# function
+class Fun(Type):
+    def __init__(self, a, b):
+        self.a = a
+        self.b = b
+    def __str__(self):
+        return 'Fun({}, {})'.format(self.a, self.b)
+    def __eq__(self, other):
+        return type(self) is type(other) and self.a == other.a and self.b == other.b
+    def __hash__(self):
+        return hash(('Fun', self.a, self.b))
+    def tvars(self):
+        return self.a.tvars() | self.b.tvars()
+    def evars(self):
+        return self.a.evars() | self.b.evars()
+    def renamed(self, renamings):
+        return Fun(self.a.renamed(renamings), self.b.renamed(renamings))
+    def under(self, σ):
+        return Fun(self.a.under(σ), self.b.under(σ))
+    def flipped(self):
+        return Fun(self.a.flipped(), self.b.flipped())
+
 # -------------------- unification --------------------
 
 # update σ : Substitution ∪ Context to unify a and b or fail with ValueError
@@ -469,6 +491,9 @@ def unify(a, b, σ):
 
     elif type(a) is TVar and a != b:
         raise U.cant_unify(a, b, 'two rigid type variables')
+
+    elif type(a) is Fun:
+        return unify(a.a, b.a, unify(a.b, b.b, σ))
 
     elif type(a) in (Array, Tuple):
         if len(a) != len(b):
@@ -511,10 +536,12 @@ def parse(s):
         ('int(a__Name)', lambda a: AVar(name2var(a))),
         ('bool(a__Name)', lambda a: BVar(name2var(a))),
 
+        ('Fun(_a, _b)', lambda a, b: Fun(go(a), go(b))),
         ('array[__a]', lambda a: Array(
             [go(i) for i in a.elts] if type(a) is A.Tuple else
             [go(a)])),
         ('a__Tuple', lambda a: Tuple([go(i) for i in a.elts])),
+
         ('True', lambda: BLit(True)),
         ('False', lambda: BLit(False))]
     def go(ast):
