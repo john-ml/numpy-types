@@ -382,8 +382,34 @@ class Not(BExp):
     def flipped(self):
         return Not(self.a.flipped())
 
-# -------------------- numpy array --------------------
+# -------------------- compound types --------------------
 
+# tuple
+class Tuple(Type):
+    def __init__(self, items):
+        self.items = [Type.lift(a) for a in items]
+    def __str__(self):
+        return '({})'.format(', '.join(str(d) for d in self.items))
+    def __eq__(self, other):
+        return type(self) is type(other) and self.items == other.items
+    def __len__(self):
+        return len(self.items)
+    def __iter__(self):
+        return (a for a in self.items)
+    def __hash__(self):
+        return hash(('Tuple', tuple(self.items)))
+    def tvars(self):
+        return U.mapreduce(U.union, U.tvars, self.items, set())
+    def evars(self):
+        return U.mapreduce(U.union, U.evars, self.items, set())
+    def renamed(self, renamings):
+        return Tuple(a.renamed(renamings) for a in self.items)
+    def under(self, σ):
+        return Tuple(a.under(σ) for a in self.items)
+    def flipped(self):
+        return Tuple(a.flipped() for a in self.items)
+
+# numpy array
 class Array(Type):
     def __init__(self, shape):
         self.shape = [Type.lift(a) for a in shape]
@@ -391,6 +417,10 @@ class Array(Type):
         return 'array[{}]'.format(', '.join(str(d) for d in self.shape))
     def __eq__(self, other):
         return type(self) is type(other) and self.shape == other.shape
+    def __len__(self):
+        return len(self.shape)
+    def __iter__(self):
+        return (a for a in self.shape)
     def __hash__(self):
         return hash(('Array', tuple(self.shape)))
     def tvars(self):
@@ -440,10 +470,10 @@ def unify(a, b, σ):
     elif type(a) is TVar and a != b:
         raise U.cant_unify(a, b, 'two rigid type variables')
 
-    elif type(a) is Array:
-        if len(a.shape) != len(b.shape):
-            raise U.cant_unify(a, b, 'shapes are of unequal length')
-        for l, r in zip(a.shape, b.shape):
+    elif type(a) in (Array, Tuple):
+        if len(a) != len(b):
+            raise U.cant_unify(a, b, 'unequal lengths')
+        for l, r in zip(a, b):
             unify(l, r, σ)
         return σ
 
@@ -484,6 +514,7 @@ def parse(s):
         ('array[__a]', lambda a: Array(
             [go(i) for i in a.elts] if type(a) is A.Tuple else
             [go(a)])),
+        ('a__Tuple', lambda a: Tuple([go(i) for i in a.elts])),
         ('True', lambda: BLit(True)),
         ('False', lambda: BLit(False))]
     def go(ast):
@@ -550,3 +581,6 @@ if __name__ == '__main__':
 
     try_unify(parse('?a'), parse('array[?a]'), σ)
     try_unify(parse('?a'), parse('array[b]'), σ)
+
+    try_unify(parse('array[a, b, c]'), parse('array[d]'), σ)
+    try_unify(parse('(a, b, c)'), parse('(d, e)'), σ)
