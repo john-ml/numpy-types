@@ -59,14 +59,7 @@ class Checker:
 
         pairs = self.analyze([S.Context()], ast)
         state = S.State([s for s, _ in pairs])
-        F = U.to_quantified_z3(state)
-
-        s = z3.Solver()
-        s.add(F)
-        if s.check() != z3.sat:
-            raise ValueError(
-                'Unsatisfiable constraint: ' +
-                str(F))
+        return U.verify(state)
 
 # -------------------- basic type-checking rules --------------------
 
