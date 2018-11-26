@@ -92,7 +92,7 @@ class Checker:
             else:
                 raise
 
-# -------------------- rule combinators --------------------
+# -------------------- rule/checker combinators --------------------
 
 # given a pattern string s, and assumptions about the types of each capture group,
 # return return_type
@@ -129,9 +129,17 @@ def binary_operator(op, v, f, name=None):
         f(v(T.parse('a')), v(T.parse('b'))),
         name)
 
-# -------------------- basic type-checking rules --------------------
-
 no_op = lambda s, a: [(s, a)]
+
+# extend an environment
+def extend(self, context, bindings, k=no_op):
+    c = context.copy()
+    for a, t in bindings.items():
+        t = T.parse(t)
+        c.annotate(a, t)
+    return k(c, None)
+
+# -------------------- basic type-checking rules --------------------
 
 def analyze_body(self, context, body, k=no_op):
     if body == []:
@@ -192,10 +200,11 @@ def analyze_assign(self, context, lhs, rhs):
 
 assign = Rule(P.make_pattern('_lhs = _rhs'), analyze_assign, 'assign')
 
-identifier = Rule(
-    P.make_pattern('a__Name'),
-    lambda self, context, a: [(context, context.typeof(U.ident2str(a)))],
-    'identifier')
+def analyze_ident(self, context, a):
+    return [(context, context.typeof(U.ident2str(a)))]
+
+ident = Rule(P.make_pattern('a__Name'), analyze_ident, 'ident')
+attr_ident = Rule(P.make_pattern('a__Attribute'), analyze_ident, 'attr_ident')
 
 def analyze_fun_def(self, context, f, args, return_type, body):
     arg_types = []
@@ -248,6 +257,20 @@ def analyze_fun_call(self, context, f, args):
 
 fun_call = Rule(P.make_pattern('_f(__args)'), analyze_fun_call, 'fun_call')
 
+# -------------------- basic rule set --------------------
+
+basic_rules = [
+    module,
+    assign,
+    ident,
+    attr_ident,
+    lit_None, lit_True, lit_False, lit_num,
+    bool_or, bool_and, bool_not, int_add, int_mul,
+    cond, cond_expr,
+    fun_def,
+    fun_call,
+    ret]
+
 if __name__ == '__main__':
     arr_zeros = expression('np.zeros(_a)', {'a': 'int(a)'}, 'array[int(a)]', 'arr_zeros')
     add_row = expression('add_row(_a)', {'a': 'array[int(a)]'}, 'array[int(a) + 1]', 'add_row')
@@ -255,22 +278,12 @@ if __name__ == '__main__':
         'smush(_a, _b)',
         {'a': 'array[int(a)]', 'b': 'array[int(a)]'},
         'array[int(a)]', 'smush')
+    import_numpy = Rule(P.make_pattern('import numpy as np'),
+        lambda self, context: extend(self, context, {'np.ones': 'Fun((int(a),), array[int(a)])'}),
+        'import_numpy')
 
     def try_check(s, careful=False):
-        rules = [
-            module, assign,
-            lit_None, lit_True, lit_False,
-            lit_num, int_add, int_mul,
-            bool_or, bool_and, bool_not,
-            arr_zeros,
-            add_row,
-            identifier,
-            smush,
-            cond,
-            cond_expr,
-            ret,
-            fun_def,
-            fun_call]
+        rules = basic_rules + [arr_zeros, add_row, smush, import_numpy]
         c = Checker(rules, return_type=T.parse('array[3]'), careful=careful)
         try:
             c.check(A.parse(s))
@@ -348,4 +361,18 @@ a = np.zeros(succ(n))
 
     try_check('''
 a += 1
+''')
+
+    try_check('''
+import numpy as np
+a = np.ones(3)
+b = np.zeros(4)
+c = smush(a, b)
+''')
+
+    try_check('''
+import numpy as np
+a = np.ones(3)
+b = np.zeros(3)
+c = smush(a, b)
 ''')
