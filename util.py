@@ -16,8 +16,8 @@ cant_unify = lambda a, b, reason='': \
 
 def to_quantified_z3(a):
     import z3
-    t = list(a.tvars())
-    e = list(a.evars())
+    t = [b.to_z3() for b in a.tvars()]
+    e = [b.to_z3() for b in a.evars()]
     ex = z3.Exists(e, a.to_z3()) if len(e) > 0 else a.to_z3()
     return z3.ForAll(t, ex) if len(t) > 0 else ex
 
@@ -25,8 +25,12 @@ def verify(a):
     import z3
     F = to_quantified_z3(a)
 
+    #print('F =', str(F))
+    #print('a =', str(a))
+
     s = z3.Solver()
     s.add(F)
+
     if s.check() != z3.sat:
         raise ValueError(
             'Unsatisfiable constraint: ' +

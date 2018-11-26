@@ -58,10 +58,10 @@ class Context:
         return self
 
     def evars(self):
-        return self.σ.evars()
+        return self.σ.evars() | self.F.evars()
 
     def tvars(self):
-        return self.σ.tvars()
+        return self.σ.tvars() | self.F.tvars()
 
     def to_z3(self):
         import z3

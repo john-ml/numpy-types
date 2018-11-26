@@ -211,9 +211,9 @@ class AVar(AExp):
     def __hash__(self):
         return hash(('AVar', self.var))
     def tvars(self):
-        return self.var.tvars()
+        return {self} if type(self.var) is TVar else set()
     def evars(self):
-        return self.var.evars()
+        return {self} if type(self.var) is EVar else set()
     def renamed(self, renamings):
         return AVar(self.var.renamed(renamings))
     def under(self, σ):
@@ -307,9 +307,9 @@ class BVar(BExp):
     def __hash__(self):
         return hash(('BVar', self.var))
     def tvars(self):
-        return self.var.tvars()
+        return {self} if type(self.var) is TVar else set()
     def evars(self):
-        return self.var.evars()
+        return {self} if type(self.var) is EVar else set()
     def renamed(self, renamings):
         return BVar(self.var.renamed(renamings))
     def under(self, σ):

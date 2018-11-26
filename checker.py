@@ -111,8 +111,9 @@ def expression(s, assumptions, return_type, name=None):
     assumptions = dict((k, to_type(v)) for k, v in assumptions.items())
     return_type = to_type(return_type)
     def f(self, context, **kwargs):
-        names = ({v.name for _, t in assumptions.items() for v in t.vars()} |
-                 {v.name for v in return_type.vars()})
+        get_name = lambda v: v.name if type(v) in (T.TVar, T.EVar) else get_name(v.var)
+        names = ({get_name(v) for _, t in assumptions.items() for v in t.vars()} |
+                 {get_name(v) for v in return_type.vars()})
         def loop(context, pairs, analyzed):
             if pairs == []:
                 # TODO better way of naming
@@ -120,7 +121,7 @@ def expression(s, assumptions, return_type, name=None):
                 instantiate = lambda t: t.renamed(renaming).flipped()
                 for name, inferred_type in analyzed:
                     context.unify(inferred_type, instantiate(assumptions[name]))
-                return [(context, instantiate(return_type))]
+                return [(U.verify(context), instantiate(return_type))]
             (name, ast), tail = pairs[0], pairs[1:]
             return self.analyze([context], ast, lambda new_context, inferred_type:
                 loop(new_context, tail, analyzed + [(name, inferred_type)]))
@@ -247,6 +248,9 @@ b = smush(a, np.zeros(3))
 ''')
 
     try_check('''
-def f(a: int, b: array[a]) -> array[a + 1]:
-    return np.zeros(a)
+def f(p: bool, a: int, b: array[a]) -> array[a + 1]:
+    if p:
+        return np.zeros(1 + a)
+    else:
+        return smush(add_row(b), np.zeros(a + 2))
 ''')

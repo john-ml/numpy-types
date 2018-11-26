@@ -66,7 +66,8 @@ class Substitution:
         return self.equalities
 
     def extract_sets(self, predicate):
-        return set(U.reducemap(U.union, U.to_z3,
+        from functools import reduce
+        return set(reduce(U.union, 
             (predicate(l) | predicate(r) for l, r in self.equal_pairs()),
             set()))
 
