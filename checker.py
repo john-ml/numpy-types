@@ -82,8 +82,6 @@ class Checker:
         return pairs
 
     def check(self, ast):
-        import z3
-
         try:
             pairs = self.analyze([S.Context()], ast)
             state = S.State([s for s, _ in pairs])
