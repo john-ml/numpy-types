@@ -33,9 +33,10 @@ class CheckError(ASTError):
     # pretty-print the error, where s is the source code that was being analyzed
     def pretty(self, s):
         pretty = lambda e: (e.pretty(s) if type(e) is CheckError else str(e))
-        return '{}\n{}'.format(
-            U.highlight(self.ast, s),
-            '\n'.join(pretty(e) for _, e in self.errors))
+        snippet = ''
+        if any(type(e) is not CheckError for _, e in self.errors):
+            snippet = U.highlight(self.ast, s) + '\n'
+        return snippet + '\n\n'.join(pretty(e) for _, e in self.errors)
 
 # no suitable pattern
 class ConfusionError(ASTError):
@@ -93,61 +94,7 @@ class Checker:
             else:
                 raise
 
-# -------------------- basic type-checking rules --------------------
-
-def analyze_body(self, context, body, k = lambda s, a: [(s, a)]):
-    if body == []:
-        return k(context, None)
-    h, t = body[0], body[1:]
-    return self.analyze([context], h, lambda new_context, _:
-        analyze_body(self, new_context, t, k))
-
-module = Rule(P.raw_pattern('__body'), analyze_body, 'module')
-
-def analyze_conditional(self, context, t, top, bot):
-    top_context = context.copy().assume(t)
-    bot_context = context.copy().assume(T.Not(t))
-    top_results = analyze_body(self, top_context, top)
-    bot_results = analyze_body(self, bot_context, bot)
-    return top_results + bot_results
-
-conditional = Rule(P.make_pattern('''
-if _p:
-    __top
-else:
-    __bot
-'''),
-lambda self, context, p, top, bot:
-    self.analyze([context], p, lambda new_context, t:
-        analyze_conditional(self, new_context, t, top, bot)),
-'conditional')
-
-def analyze_conditional_expr(self, context, t, l, r):
-    top_context = context.copy().assume(t)
-    bot_context = context.copy().assume(T.Not(t))
-    top_results = self.analyze([top_context], l)
-    bot_results = self.analyze([bot_context], r)
-    return top_results + bot_results
-
-conditional_expr = Rule(
-    P.make_pattern('_l if _p else _r'),
-    lambda self, context, l, p, r:
-        self.analyze([context], p, lambda new_context, t:
-            analyze_conditional_expr(self, new_context, t, l, r)),
-    'conditional_expr')
-
-def assignment(self, context, lhs, rhs):
-    assert type(lhs) is A.Name
-    def k(new_context, new_t):
-        if U.ident2str(lhs) in new_context:
-            old_t = new_context.typeof(U.ident2str(lhs))
-            if not (isinstance(old_t, T.AExp) and isinstance(new_t, T.AExp) or
-                    isinstance(old_t, T.BExp) and isinstance(new_t, T.BExp)):
-                new_context.unify(old_t, new_t)
-        new_context.annotate(U.ident2str(lhs), new_t)
-        return [(new_context, None)]
-    return self.analyze([context], rhs, k)
-assign = Rule(P.make_pattern('_lhs = _rhs'), assignment, 'assign')
+# -------------------- rule combinators --------------------
 
 # given a pattern string s, and assumptions about the types of each capture group,
 # return return_type
@@ -184,12 +131,75 @@ def binary_operator(op, v, f, name=None):
         f(v(T.parse('a')), v(T.parse('b'))),
         name)
 
+# -------------------- basic type-checking rules --------------------
+
+no_op = lambda s, a: [(s, a)]
+
+def analyze_body(self, context, body, k=no_op):
+    if body == []:
+        return k(context, None)
+    h, t = body[0], body[1:]
+    return self.analyze([context], h, lambda new_context, _:
+        analyze_body(self, new_context, t, k))
+
+module = Rule(P.raw_pattern('__body'), analyze_body, 'module')
+
+def analyze_cond(self, context, t, top, bot, k=no_op):
+    top_context = context.copy().assume(t)
+    bot_context = context.copy().assume(T.Not(t))
+    top_results = analyze_body(self, top_context, top)
+    bot_results = analyze_body(self, bot_context, bot)
+    return [b
+        for s, a in top_results + bot_results
+        for b in k(s, a)]
+
+cond = Rule(P.make_pattern('''
+if _p:
+    __top
+else:
+    __bot
+'''),
+lambda self, context, p, top, bot:
+    self.analyze([context], p, lambda new_context, t:
+        analyze_cond(self, new_context, t, top, bot)),
+'cond')
+
+def analyze_cond_expr(self, context, t, l, r, k=no_op):
+    top_context = context.copy().assume(t)
+    bot_context = context.copy().assume(T.Not(t))
+    top_results = self.analyze([top_context], l)
+    bot_results = self.analyze([bot_context], r)
+    return [b
+        for s, a in top_results + bot_results
+        for b in k(s, a)]
+
+cond_expr = Rule(
+    P.make_pattern('_l if _p else _r'),
+    lambda self, context, l, p, r:
+        self.analyze([context], p, lambda new_context, t:
+            analyze_cond_expr(self, new_context, t, l, r)),
+    'cond_expr')
+
+def analyze_assign(self, context, lhs, rhs):
+    assert type(lhs) is A.Name
+    def k(new_context, new_t):
+        if U.ident2str(lhs) in new_context:
+            old_t = new_context.typeof(U.ident2str(lhs))
+            if not (isinstance(old_t, T.AExp) and isinstance(new_t, T.AExp) or
+                    isinstance(old_t, T.BExp) and isinstance(new_t, T.BExp)):
+                new_context.unify(old_t, new_t)
+        new_context.annotate(U.ident2str(lhs), new_t)
+        return [(new_context, None)]
+    return self.analyze([context], rhs, k)
+
+assign = Rule(P.make_pattern('_lhs = _rhs'), analyze_assign, 'assign')
+
 identifier = Rule(
     P.make_pattern('a__Name'),
     lambda self, context, a: [(context, context.typeof(U.ident2str(a)))],
     'identifier')
 
-def fundef(self, context, f, args, return_type, body):
+def analyze_fun_def(self, context, f, args, return_type, body):
     arg_types = []
     nested_context = context.copy()
     for arg in args:
@@ -205,9 +215,9 @@ def fundef(self, context, f, args, return_type, body):
         lambda new_context, _: (lambda _:
             [(context.annotate(f, fun_type), None)])(U.verify(new_context)))
 
-function_definition = Rule(P.make_pattern('''
+fun_def = Rule(P.make_pattern('''
 def _f(__args) -> _return_type:
-    __body'''), fundef, 'function_definition')
+    __body'''), analyze_fun_def, 'fun_def')
 
 lit_None = literal('None', T.TNone())
 lit_True = literal('True', T.BLit(True))
@@ -226,7 +236,7 @@ ret = Rule(P.make_pattern('return _a'), lambda self, context, a:
     self.analyze([context], a, lambda new_context, t:
         [(new_context.unify(self.return_type, t), None)]), 'return')
 
-def funcall(self, context, f, args):
+def analyze_fun_call(self, context, f, args):
     def loop(context, l, arg_types):
         if l == []:
             arg_type = T.Tuple(arg_types)
@@ -238,7 +248,7 @@ def funcall(self, context, f, args):
             loop(new_context, t, arg_types + [inferred_type]))
     return loop(context, args, [])
 
-function_call = Rule(P.make_pattern('_f(__args)'), funcall, 'function_call')
+fun_call = Rule(P.make_pattern('_f(__args)'), analyze_fun_call, 'fun_call')
 
 if __name__ == '__main__':
     arr_zeros = expression('np.zeros(_a)', {'a': 'int(a)'}, 'array[int(a)]', 'arr_zeros')
@@ -247,7 +257,6 @@ if __name__ == '__main__':
         'smush(_a, _b)',
         {'a': 'array[int(a)]', 'b': 'array[int(a)]'},
         'array[int(a)]', 'smush')
-
 
     def try_check(s, careful=False):
         rules = [
@@ -259,11 +268,11 @@ if __name__ == '__main__':
             add_row,
             identifier,
             smush,
-            conditional,
-            conditional_expr,
+            cond,
+            cond_expr,
             ret,
-            function_definition,
-            function_call]
+            fun_def,
+            fun_call]
         c = Checker(rules, return_type=T.parse('array[3]'), careful=careful)
         try:
             c.check(A.parse(s))
