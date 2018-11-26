@@ -70,7 +70,7 @@ class Type:
 
     @staticmethod
     def fresh_all(types):
-        renaming = dict(zip(v.name for t in types for v in t.vars()), fresh_ids)
+        renaming = dict(zip((name for t in types for name in t.names()), fresh_ids)
         return [t.renamed(renaming) for t in types]
 
     @staticmethod
@@ -514,6 +514,8 @@ def unify(a, b, σ):
         return σ
 
     return σ
+
+# -------------------- parsing --------------------
 
 name2var = lambda name: (EVar(name.id[1:]) if name.id[0] == '_' else TVar(name.id))
 to_int = (lambda t:

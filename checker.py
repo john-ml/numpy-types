@@ -1,6 +1,6 @@
 import util as U
 import pattern as P
-import state as S
+import Context as C
 import ast as A
 import nptype as T
 
@@ -83,8 +83,8 @@ class Checker:
 
     def check(self, ast):
         try:
-            pairs = self.analyze([S.Context()], ast)
-            state = S.State([s for s, _ in pairs])
+            pairs = self.analyze([C.Context()], ast)
+            state = C.State([s for s, _ in pairs])
             return U.verify(state)
         except (ValueError, CheckError) as e:
             if not self.careful:
