@@ -33,7 +33,6 @@ class CheckError(Exception):
     # pretty-print the error, where s is the source code that was being analyzed
     def pretty(self, s):
         pretty = lambda e: (e.pretty(s) if type(e) is CheckError else str(e))
-        line = lambda a: (0 if type(a) is A.Module else a.lineno)
         return '{}\n{}'.format(
             U.highlight(self.ast, s),
             '\n'.join(pretty(e) for _, e in self.errors))
@@ -117,6 +116,20 @@ lambda self, context, p, top, bot:
     self.analyze([context], p, lambda new_context, t:
         analyze_conditional(self, new_context, t, top, bot)),
 'conditional')
+
+def analyze_conditional_expr(self, context, t, l, r):
+    top_context = context.copy().assume(t)
+    bot_context = context.copy().assume(T.Not(t))
+    top_results = self.analyze([top_context], l)
+    bot_results = self.analyze([bot_context], r)
+    return top_results + bot_results
+
+conditional_expr = Rule(
+    P.make_pattern('_l if _p else _r'),
+    lambda self, context, l, p, r:
+        self.analyze([context], p, lambda new_context, t:
+            analyze_conditional_expr(self, new_context, t, l, r)),
+    'conditional_expr')
 
 def assignment(self, context, lhs, rhs):
     assert type(lhs) is A.Name
@@ -229,6 +242,7 @@ if __name__ == '__main__':
             identifier,
             smush,
             conditional,
+            conditional_expr,
             ret,
             function_definition]
         c = Checker(rules, return_type=T.parse('array[3]'), careful=careful)
@@ -240,6 +254,8 @@ if __name__ == '__main__':
                 print(e.pretty(s))
             else:
                 print(e)
+        finally:
+            print()
 
     try_check('''
 a = True
@@ -285,4 +301,18 @@ def f(p: bool, a: int, b: array[a]) -> array[a + 1]:
         return np.zeros(1 + a)
     else:
         return smush(add_row(b), np.zeros(a + 2))
+''')
+
+    try_check('''
+def f(p : bool, n : int) -> array[n + 2]:
+    if p:
+        n = 1 + n
+        r = np.zeros(n)
+    else:
+        r = np.zeros(n + 1)
+    return smush(add_row(r), np.zeros(n + 1 if p else n + 2))
+''')
+
+    try_check('''
+a = 0 if True else 1
 ''')
