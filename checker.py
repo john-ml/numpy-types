@@ -13,18 +13,18 @@ class Rule:
         self.action = action
         self.name = name
 
-# checker doesn't know what to do
-class ConfusionError(Exception):
-    pass
+class ASTError(Exception):
+    def __init__(self, ast):
+        self.ast = ast # problematic subtree
 
 # type-checking failed
-class CheckError(Exception):
+class CheckError(ASTError):
     def __init__(self, ast, errors):
-        self.ast = ast # problematic subtree
+        self.ast = ast
         self.errors = errors # rules attempted and errors they produced
 
     def __str__(self):
-        return 'No applicable rule for: {}\nfor:\n{}'.format(
+        return '{}\nfor:\n{}'.format(
             P.pretty(P.explode(self.ast)),
             '\n'.join('{}\n{}'.format(
                 r.name,
@@ -36,6 +36,13 @@ class CheckError(Exception):
         return '{}\n{}'.format(
             U.highlight(self.ast, s),
             '\n'.join(pretty(e) for _, e in self.errors))
+
+# no suitable pattern
+class ConfusionError(ASTError):
+    def __init__(self, ast):
+        self.ast = ast
+    def pretty(self, s):
+        return 'No applicable rule:\n{}'.format(U.highlight(self.ast, s))
 
 # type-checker acting on a set of checking rules
 class Checker:
@@ -69,7 +76,7 @@ class Checker:
                     errors.append((rule, e))
             else:
                 if errors == []:
-                    raise ConfusionError('No applicable rule for:\n' + P.pretty(P.explode(ast)))
+                    raise ConfusionError(ast)
                 raise CheckError(ast, errors)
         return pairs
 
@@ -262,7 +269,7 @@ if __name__ == '__main__':
             c.check(A.parse(s))
             print('OK')
         except (ValueError, ConfusionError, CheckError) as e:
-            if type(e) is CheckError:
+            if type(e) in (CheckError, ConfusionError):
                 print(e.pretty(s))
             else:
                 print(e)
@@ -330,4 +337,8 @@ def succ(a : int) -> int:
     return a + 1
 n = 3
 a = np.zeros(succ(n))
+''')
+
+    try_check('''
+a += 1
 ''')
