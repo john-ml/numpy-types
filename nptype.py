@@ -38,8 +38,13 @@ class Type:
         pass
     # partial ordering of types, for unification
     def __lshift__(a, b):
-        return (type(a) is not EVar and type(b) is EVar) or \
-               (type(a) is type(b) is EVar and a.name <= b.name)
+        is_e = lambda v, t: type(v) is t and type(v.var) is EVar
+        return (type(a) is not EVar and type(b) is EVar or
+                type(a) is type(b) is EVar and a.name <= b.name or
+                not is_e(a, AVar) and isinstance(a, AExp) and is_e(b, AVar) or
+                not is_e(a, BVar) and isinstance(a, BExp) and is_e(b, BVar) or
+                is_e(a, AVar) and is_e(b, AVar) and a.var.name <= b.var.name or
+                is_e(a, BVar) and is_e(b, BVar) and a.var.name <= b.var.name)
 
     # for arithmetic expressions
     def __add__(self, other):
@@ -473,7 +478,11 @@ def unify(a, b, σ):
 
     # lifted variables
     elif type(a) is type(b) is AVar or type(a) is type(b) is BVar:
-        return unify(a.var, b.var, σ)
+        if EVar in (type(a.var), type(b.var)):
+            return σ.union(a, b)
+        else:
+            assert type(a.var) is type(b.var) is TVar
+            raise U.cant_unify(a, b, 'two rigid type variables')
 
     # literals
     elif type(a) is type(b) is ALit or type(a) is type(b) is BLit:

@@ -38,8 +38,6 @@ class Checker:
             for rule in self.rules:
                 try:
                     matches = P.matches(rule.pattern, ast)
-                    #print('matches for', rule.name, '=', matches)
-                    #print(P.pretty(P.explode(rule.pattern)), '\n\n\n\n\n', P.pretty(P.explode(ast)))
                     if matches is None:
                         continue
                     new_pairs = rule.action(self, context.copy(), **matches)
@@ -63,8 +61,6 @@ class Checker:
         state = S.State([s for s, _ in pairs])
         F = U.to_quantified_z3(state)
 
-        print('state =', state)
-        print('F =', F)
         s = z3.Solver()
         s.add(F)
         if s.check() != z3.sat:
@@ -215,48 +211,49 @@ if __name__ == '__main__':
     def try_check(s):
         try:
             c.check(A.parse(s))
+            print(s)
         except (ValueError, ConfusionError) as e:
             print(e)
 
-#    try_check('''
-#a = True
-#a = None
-#''')
-#
-#    try_check('''
-#d = add_row(np.zeros(3))
-#e = add_row(d)
-#f = smush(d, e)
-#''')
-#
-#    try_check('''
-#a = True or False
-#a = not False
-#b = (1 + 1) * (1 + 1 + 1)
-#c = np.zeros(3)
-#''')
-#
-#    try_check('''
-#a = add_row(np.zeros(2))
-#return a
-#b = np.zeros(3)
-#return b
-#c = np.zeros(1 + 1 + 1)
-#return c
-#''')
-#
-#    try_check('''
-#n = 1
-#m = 1
-#if False:
-#    n = n + 1
-#else:
-#    m = m + 1
-#a = np.zeros(n + m)
-#b = smush(a, np.zeros(3))
-#''')
+    try_check('''
+a = True
+a = None
+''')
+
+    try_check('''
+d = add_row(np.zeros(3))
+e = add_row(d)
+f = smush(d, e)
+''')
+
+    try_check('''
+a = True or False
+a = not False
+b = (1 + 1) * (1 + 1 + 1)
+c = np.zeros(3)
+''')
+
+    try_check('''
+a = add_row(np.zeros(2))
+return a
+b = np.zeros(3)
+return b
+c = np.zeros(1 + 1 + 1)
+return c
+''')
+
+    try_check('''
+n = 1
+m = 1
+if False:
+    n = n + 1
+else:
+    m = m + 1
+a = np.zeros(n + m)
+b = smush(a, np.zeros(3))
+''')
 
     try_check('''
 def f(a: int, b: array[a]) -> array[a + 1]:
-    return smush(np.zeros(a + 1), add_row(b))
+    return np.zeros(a)
 ''')

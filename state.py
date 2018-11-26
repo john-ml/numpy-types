@@ -85,68 +85,6 @@ class State:
     def __contains__(self, a):
         return all(a in c for c in self.contexts)
 
-    # return two copies of state s, s' where s assumes F and s' assumes ¬F
-    def fork(self, F):
-        s = State()
-        s.contexts = [c.copy().assume(T.Not(F)) for c in self.contexts]
-
-        for c in self.contexts:
-            c.assume(F)
-        return self, s
-
-    # steal contexts from other
-    def join(self, other):
-        self.contexts.extend(other.contexts)
-        return self
-
-    def copy(self):
-        s = State()
-        s.contexts = [a.copy() for a in self.contexts]
-        return s
-
-    def push(self):
-        for c in self.contexts:
-            c.push()
-
-    def pop(self):
-        for c in self.contexts:
-            c.pop()
-
-    def undo(self):
-        for c in self.contexts:
-            c.undo()
-
-    def atomically(self, f):
-        self.push()
-        try:
-            result = f(self)
-            self.pop()
-            return result
-        except:
-            self.undo()
-            raise
-
-    def annotate(self, a, t):
-        for c in self.contexts:
-            c.annotate(a, t)
-        return self
-
-    def typesof(self, a):
-        return [c.typeof(a) for c in self.contexts]
-
-    def find(self, a):
-        return [c.find(a) for c in self.contexts]
-
-    def union(self, a, b):
-        for c in self.contexts:
-            c.union(a, b)
-        return self
-
-    def assume(self, G):
-        for c in self.contexts:
-            c.assume(G)
-        return self
-
     def evars(self):
         return U.mapreduce(U.union, U.evars, self.contexts, set())
 
@@ -157,16 +95,6 @@ class State:
         import z3
         return z3.And([c.to_z3() for c in self.contexts])
 
-    def run(self, *actions):
-        for f in actions:
-            f(self)
-        return self
-
-    def unify(self, a, b):
-        for c in self:
-            T.unify(a, b, c)
-        return self
-
 # --------------------------------------------------------------------------------
 
 if __name__ == '__main__':
@@ -174,29 +102,6 @@ if __name__ == '__main__':
     print(Context().to_z3())
     print(Context().evars())
     print(Context().tvars())
-
-    a = State()
-    print([b.union(1, 2) for b in a])
-    print(a)
-
-    s = State()
-    print(s, '\n\n')
-    s, s1 = s.fork(T.BVar(T.TVar('a')))
-    s1.unify(T.BVar(T.EVar('a')), T.BLit(True))
-    print(s, '\n\n')
-    print(s1, '\n\n')
-
-    s.join(s1)
-    print(s, '\n\n')
-    try:
-        s.unify(T.BVar(T.EVar('a')), T.BLit(False))
-    except ValueError as e:
-        print(e)
-    print(s, '\n\n')
-
-    print(s.tvars())
-    print(s.evars())
-    print(U.to_quantified_z3(s))
 
     c = Context()
     c.push()
@@ -207,25 +112,3 @@ if __name__ == '__main__':
     print(c)
     c.undo()
     print(c)
-
-    def test(s, fail=True):
-        s.annotate('a', T.AVar(T.TVar('a')) + 1)
-        s.union(1, 2)
-        s.assume(T.BVar(T.TVar('a')))
-        print('test():', s)
-        if fail:
-            raise ValueError('whoops, failed.')
-
-    s = State()
-    print(s, end='\n\n')
-    try:
-        s.atomically(test)
-    except ValueError as e:
-        print(e)
-    print('after test():', s)
-
-    try:
-        s.atomically(lambda s: test(s, fail=False))
-    except ValueError as e:
-        print(e)
-    print('after test():', s)
