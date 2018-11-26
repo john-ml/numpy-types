@@ -134,12 +134,12 @@ conditional_expr = Rule(
 def assignment(self, context, lhs, rhs):
     assert type(lhs) is A.Name
     def k(new_context, new_t):
-        if lhs.id in new_context:
-            old_t = new_context.typeof(lhs.id)
+        if U.ident2str(lhs) in new_context:
+            old_t = new_context.typeof(U.ident2str(lhs))
             if not (isinstance(old_t, T.AExp) and isinstance(new_t, T.AExp) or
                     isinstance(old_t, T.BExp) and isinstance(new_t, T.BExp)):
                 new_context.unify(old_t, new_t)
-        new_context.annotate(lhs.id, new_t)
+        new_context.annotate(U.ident2str(lhs), new_t)
         return [(new_context, None)]
     return self.analyze([context], rhs, k)
 assign = Rule(P.make_pattern('_lhs = _rhs'), assignment, 'assign')
@@ -151,9 +151,7 @@ def expression(s, assumptions, return_type, name=None):
     assumptions = dict((k, to_type(v)) for k, v in assumptions.items())
     return_type = to_type(return_type)
     def f(self, context, **kwargs):
-        get_name = lambda v: v.name if type(v) in (T.TVar, T.EVar) else get_name(v.var)
-        names = ({get_name(v) for _, t in assumptions.items() for v in t.vars()} |
-                 {get_name(v) for v in return_type.vars()})
+        names =  {v for _, t in assumptions.items() for v in t.names()} | return_type.names()
         def loop(context, pairs, analyzed):
             if pairs == []:
                 # TODO better way of naming
@@ -181,12 +179,10 @@ def binary_operator(op, v, f, name=None):
         f(v(T.parse('a')), v(T.parse('b'))),
         name)
 
-def ident(self, context, a):
-    name = a.id
-    if name not in context:
-        raise ConfusionError('Unbound identifier: ' + name)
-    return [(context, context.typeof(name))]
-identifier = Rule(P.make_pattern('a__Name'), ident, 'identifier')
+identifier = Rule(
+    P.make_pattern('a__Name'),
+    lambda self, context, a: [(context, context.typeof(U.ident2str(a)))],
+    'identifier')
 
 def fundef(self, context, f, args, return_type, body):
     arg_types = []
@@ -222,6 +218,20 @@ ret = Rule(P.make_pattern('return _a'), lambda self, context, a:
     self.analyze([context], a, lambda new_context, t:
         [(new_context.unify(self.return_type, t), None)]), 'return')
 
+def funcall(self, context, f, args):
+    def loop(context, l, arg_types):
+        if l == []:
+            arg_type = T.Tuple(arg_types)
+            fn_type = context.typeof(U.ident2str(f)).fresh().flipped()
+            context.unify(arg_type, fn_type.a)
+            return [(context, fn_type.b)]
+        h, t = l[0], l[1:]
+        return self.analyze([context], h, lambda new_context, inferred_type:
+            loop(new_context, t, arg_types + [inferred_type]))
+    return loop(context, args, [])
+
+function_call = Rule(P.make_pattern('_f(__args)'), funcall, 'function_call')
+
 if __name__ == '__main__':
     arr_zeros = expression('np.zeros(_a)', {'a': 'int(a)'}, 'array[int(a)]', 'arr_zeros')
     add_row = expression('add_row(_a)', {'a': 'array[int(a)]'}, 'array[int(a) + 1]', 'add_row')
@@ -244,7 +254,8 @@ if __name__ == '__main__':
             conditional,
             conditional_expr,
             ret,
-            function_definition]
+            function_definition,
+            function_call]
         c = Checker(rules, return_type=T.parse('array[3]'), careful=careful)
         try:
             c.check(A.parse(s))
@@ -314,5 +325,8 @@ def f(p : bool, n : int) -> array[n + 2]:
 ''')
 
     try_check('''
-a = 0 if True else 1
+def succ(a : int) -> int:
+    return a + 1
+n = 3
+a = succ(n)
 ''')

@@ -26,6 +26,8 @@ class Type:
         pass
     def vars(self):
         return self.tvars() | self.evars()
+    def names(self):
+        return {v.name if type(v) in (TVar, EVar) else v.var.name for v in self.vars()}
     def renamed(self, renamings):
         pass
     def under(self, σ):
@@ -33,7 +35,7 @@ class Type:
     def to_z3(self):
         return True
     def fresh(self):
-        return self.renamed(dict(zip((a.name for a in self.vars()), fresh_ids)))
+        return self.renamed(dict(zip(self.names(), fresh_ids)))
     def flipped(self):
         pass
     # partial ordering of types, for unification
@@ -525,10 +527,13 @@ def from_ast(ast):
         ('_a + _b', lambda a, b: Add(go(a), go(b))),
         ('_a * _b', lambda a, b: Mul(go(a), go(b))),
 
-        ('a__Name', lambda a: name2var(a)),
         ('_a : int', lambda a: (a, AVar(TVar(a)))),
         ('_a : bool', lambda a: (a, BVar(TVar(a)))),
         ('_a : _t', lambda a, t: (a, go(t))),
+
+        ('int', lambda: AVar(EVar(next(fresh_ids)))),
+        ('bool', lambda: BVar(EVar(next(fresh_ids)))),
+        ('a__Name', lambda a: name2var(a)),
 
         ('Fun(_a, _b)', lambda a, b: Fun(go(a), go(b))),
         ('array[__a]', lambda a: Array(

@@ -2,6 +2,7 @@ import util as U
 import pattern as P
 import nptype as T
 import substitution as S
+import ast as A
 
 # substitution map + typing environment under some precondition
 class Context:
@@ -44,7 +45,9 @@ class Context:
         return self
 
     def typeof(self, a):
-        return self.Γ[a]
+        if a not in self.Γ:
+            raise ValueError('Unbound identifier: ' + a)
+        return self.Γ[a].under(self)
 
     def find(self, a):
         return self.σ.find(a)

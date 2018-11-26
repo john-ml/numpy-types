@@ -90,6 +90,10 @@ def matches(pattern, query):
            and pattern[0].value.id.startswith('__'):
             return { pattern[0].value.id[2:]: query } 
         if len(pattern) == 1 \
+           and type(pattern[0]) is ast.Name \
+           and pattern[0].id.startswith('__'):
+            return { pattern[0].id[2:]: query } 
+        if len(pattern) == 1 \
            and type(pattern[0]) is ast.arg \
            and pattern[0].arg.startswith('__'):
             return { pattern[0].arg[2:]: query } 
@@ -195,3 +199,9 @@ if __name__ == '__main__':
         ast.parse('def f(a : int, b : array[a]) -> array[a + 1]:\n    return test').body[0])))
     print(make_pattern('_a : _t'))
     print(type(make_pattern('_a : _t')) is ast.arg)
+    print(pretty_parse('f(1, 2, 3)'))
+    print(pretty_parse('f(1)'))
+    print(pretty_matches(matches(
+        ast.parse('_f(__a)'),
+        ast.parse('g(1, 2, 3)'))))
+    print(pretty_parse('a.b.c'))

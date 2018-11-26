@@ -19,7 +19,20 @@ def highlight(ast, s):
     import ast as A
     row = ast.lineno - 1 if type(ast) is not A.Module else 0
     col = ast.col_offset if type(ast) is not A.Module else 0
-    return '{}\n{}'.format(s.split('\n')[row], ' ' * col + '^')
+    return 'at {}:{}:\n{}\n{}'.format(
+        row + 1,
+        col + 1,
+        s.split('\n')[row],
+        ' ' * col + '^')
+
+def ident2str(a):
+    import ast as A
+    if type(a) is A.Attribute:
+        return '{}.{}'.format(ident2str(a.value), a.attr)
+    elif type(a) is A.Name:
+        return a.id
+    else:
+        raise ValueError('Unknown AST node (ident2str): ', type(a))
 
 def to_quantified_z3(a):
     import z3
