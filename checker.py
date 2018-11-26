@@ -1,6 +1,6 @@
 import util as U
 import pattern as P
-import Context as C
+import context as C
 import ast as A
 import nptype as T
 
