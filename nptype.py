@@ -515,17 +515,23 @@ def unify(a, b, σ):
 
     return σ
 
+name2var = lambda name: (EVar(name.id[1:]) if name.id[0] == '_' else TVar(name.id))
+to_int = (lambda t:
+    AVar(t) if type(t) in (TVar, EVar) else
+    t if type(t) in (ALit, AVar) else
+    type(t)(to_int(t.a), to_int(t.b)))
+to_bool = (lambda t:
+    BVar(t) if type(t) in (TVar, EVar) else
+    t if type(t) in (BLit, BVar) else
+    Not(to_bool(t.a)) if type(t) is Not else
+    type(t)(to_bool(t.a), to_bool(t.b)))
+
 def from_ast(ast):
-    name2var = lambda name: (EVar(name.id[1:]) if name.id[0] == '_' else TVar(name.id))
-    to_int = (lambda t:
-        AVar(t) if type(t) in (TVar, AVar) else
-         t if type(t) is ALit else
-         type(t)(to_int(t.a), to_int(t.b)))
     rules = [
         ('a__Num', lambda a: ALit(a.n)),
 
-        ('_a + _b', lambda a, b: Add(go(a), go(b))),
-        ('_a * _b', lambda a, b: Mul(go(a), go(b))),
+        ('_a + _b', lambda a, b: Add(to_int(go(a)), to_int(go(b)))),
+        ('_a * _b', lambda a, b: Mul(to_int(go(a)), to_int(go(b)))),
 
         ('_a : int', lambda a: (a, AVar(TVar(a)))),
         ('_a : bool', lambda a: (a, BVar(TVar(a)))),
@@ -558,28 +564,12 @@ def parse(s):
     rules = [
         ('a__Num', lambda a: ALit(a.n)),
 
-        ('a__Name + b__Name', lambda a, b: Add(AVar(name2var(a)), AVar(name2var(b)))),
-        ('a__Name + _b', lambda a, b: Add(AVar(name2var(a)), go(b))),
-        ('_a + b__Name', lambda a, b: Add(go(a), AVar(name2var(b)))),
-        ('_a + _b', lambda a, b: Add(go(a), go(b))),
+        ('_a + _b', lambda a, b: Add(to_int(go(a)), to_int(go(b)))),
+        ('_a * _b', lambda a, b: Mul(to_int(go(a)), to_int(go(b)))),
 
-        ('a__Name * b__Name', lambda a, b: Mul(AVar(name2var(a)), AVar(name2var(b)))),
-        ('a__Name * _b', lambda a, b: Mul(AVar(name2var(a)), go(b))),
-        ('_a * b__Name', lambda a, b: Mul(go(a), AVar(name2var(b)))),
-        ('_a * _b', lambda a, b: Mul(go(a), go(b))),
-
-        ('a__Name and b__Name', lambda a, b: And(BVar(name2var(a)), BVar(name2var(b)))),
-        ('a__Name and _b', lambda a, b: And(BVar(name2var(a)), go(b))),
-        ('_a and b__Name', lambda a, b: And(go(a), BVar(name2var(b)))),
-        ('_a and _b', lambda a, b: And(go(a), go(b))),
-
-        ('a__Name or b__Name', lambda a, b: Or(BVar(name2var(a)), BVar(name2var(b)))),
-        ('a__Name or _b', lambda a, b: Or(BVar(name2var(a)), go(b))),
-        ('_a or b__Name', lambda a, b: Or(go(a), BVar(name2var(b)))),
-        ('_a or _b', lambda a, b: Or(go(a), go(b))),
-
-        ('not a__Name', lambda a: Not(BVar(name2var(a)))),
-        ('not _a', lambda a: Not(go(a))),
+        ('_a and _b', lambda a, b: And(to_bool(go(a)), to_bool(go(b)))),
+        ('_a or _b', lambda a, b: Or(to_bool(go(a)), to_bool(go(b)))),
+        ('not _a', lambda a: Not(to_bool(go(a)))),
 
         ('a__Name', lambda a: name2var(a)),
         ('int(a__Name)', lambda a: AVar(name2var(a))),

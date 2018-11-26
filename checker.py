@@ -279,7 +279,8 @@ if __name__ == '__main__':
         {'a': 'array[int(a)]', 'b': 'array[int(a)]'},
         'array[int(a)]', 'smush')
     import_numpy = Rule(P.make_pattern('import numpy as np'),
-        lambda self, context: extend(self, context, {'np.ones': 'Fun((int(a),), array[int(a)])'}),
+        lambda self, context: extend(self, context, {
+            'np.ones': 'Fun((int(a),), array[a])'}),
         'import_numpy')
 
     def try_check(s, careful=False):
