@@ -577,8 +577,8 @@ def parse(s):
 
         ('Fun(_a, _b)', lambda a, b: Fun(go(a), go(b))),
         ('array[__a]', lambda a: Array(
-            [go(i) for i in a.elts] if type(a) is A.Tuple else
-            [go(a)])),
+            [to_int(go(i)) for i in a.elts] if type(a) is A.Tuple else
+            [to_int(go(a))])),
         ('a__Tuple', lambda a: Tuple([go(i) for i in a.elts])),
 
         ('True', lambda: BLit(True)),
