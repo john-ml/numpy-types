@@ -1,4 +1,5 @@
 from functools import *
+indent = lambda space, s: '\n'.join(space + l for l in s.split('\n'))
 typedict = lambda d: ', '.join('{} : {}'.format(k, v) for k, v in d.items())
 union = lambda a, b: a | b
 evars = lambda a: a.evars()
@@ -13,6 +14,12 @@ zipwith = lambda f, a: (f(l, r) for l, r in a)
 cant_unify = lambda a, b, reason='': \
     ValueError("Can't unify '{}' with '{}'{}".format( \
         a, b, ('' if reason == '' else ' ({})'.format(reason))))
+
+def highlight(ast, s):
+    import ast as A
+    row = ast.lineno - 1 if type(ast) is not A.Module else 0
+    col = ast.col_offset if type(ast) is not A.Module else 0
+    return '{}\n{}'.format(s.split('\n')[row], ' ' * col + '^')
 
 def to_quantified_z3(a):
     import z3

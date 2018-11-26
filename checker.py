@@ -17,11 +17,33 @@ class Rule:
 class ConfusionError(Exception):
     pass
 
+# type-checking failed
+class CheckError(Exception):
+    def __init__(self, ast, errors):
+        self.ast = ast # problematic subtree
+        self.errors = errors # rules attempted and errors they produced
+
+    def __str__(self):
+        return 'No applicable rule for: {}\nfor:\n{}'.format(
+            P.pretty(P.explode(self.ast)),
+            '\n'.join('{}\n{}'.format(
+                r.name,
+                U.indent('  ', str(e))) for r, e in self.errors))
+
+    # pretty-print the error, where s is the source code that was being analyzed
+    def pretty(self, s):
+        pretty = lambda e: (e.pretty(s) if type(e) is CheckError else str(e))
+        line = lambda a: (0 if type(a) is A.Module else a.lineno)
+        return '{}\n{}'.format(
+            U.highlight(self.ast, s),
+            '\n'.join(pretty(e) for _, e in self.errors))
+
 # type-checker acting on a set of checking rules
 class Checker:
-    def __init__(self, rules, return_type=T.TNone()):
+    def __init__(self, rules, return_type=T.TNone(), careful=True):
         self.rules = rules
         self.return_type = return_type
+        self.careful = careful
 
     # try each of the rules in order and run action corresponding to first matching rule
     # Checker
@@ -30,7 +52,7 @@ class Checker:
     # * (Context * a -> [Context * b])
     # -> [Context * b]
     # fail with ConfusionError if no rules match
-    # fail with ValueError if all rules that matched threw
+    # fail with CheckError if all rules that matched threw
     def analyze(self, contexts, ast, f = lambda s, a: [(s, a)]):
         pairs = []
         for context in contexts:
@@ -44,14 +66,12 @@ class Checker:
                     new_pairs = [b for s, a in new_pairs for b in f(s, a)]
                     pairs.extend(new_pairs)
                     break
-                except ValueError as e:
-                    errors.append(e)
+                except (ValueError, CheckError) as e:
+                    errors.append((rule, e))
             else:
                 if errors == []:
                     raise ConfusionError('No applicable rule for:\n' + P.pretty(P.explode(ast)))
-                raise ValueError('No applicable rule for:\n{}\nReasons:\n{}'.format(
-                    P.pretty(P.explode(ast)),
-                    '\n'.join(['  ' + l for e in errors for l in str(e).split('\n')])))
+                raise CheckError(ast, errors)
         return pairs
 
     def check(self, ast):
@@ -59,7 +79,14 @@ class Checker:
 
         pairs = self.analyze([S.Context()], ast)
         state = S.State([s for s, _ in pairs])
-        return U.verify(state)
+
+        try:
+            return U.verify(state)
+        except ValueError as e:
+            if not self.careful:
+                Checker(self.rules, self.return_type, careful=True).check(ast)
+            else:
+                raise
 
 # -------------------- basic type-checking rules --------------------
 
@@ -121,7 +148,9 @@ def expression(s, assumptions, return_type, name=None):
                 instantiate = lambda t: t.renamed(renaming).flipped()
                 for name, inferred_type in analyzed:
                     context.unify(inferred_type, instantiate(assumptions[name]))
-                return [(U.verify(context), instantiate(return_type))]
+                if self.careful:
+                    U.verify(context)
+                return [(context, instantiate(return_type))]
             (name, ast), tail = pairs[0], pairs[1:]
             return self.analyze([context], ast, lambda new_context, inferred_type:
                 loop(new_context, tail, analyzed + [(name, inferred_type)]))
@@ -155,7 +184,7 @@ def fundef(self, context, f, args, return_type, body):
     r = T.from_ast(return_type)
     context.annotate(f, T.Fun(T.Tuple(arg_types), r))
     return analyze_body(
-        Checker(self.rules, return_type=r),
+        Checker(self.rules, return_type=r, careful=self.careful),
         context,
         **{'body': body})
 
@@ -188,26 +217,29 @@ if __name__ == '__main__':
         {'a': 'array[int(a)]', 'b': 'array[int(a)]'},
         'array[int(a)]', 'smush')
 
-    rules = [
-        module, assign,
-        lit_None, lit_True, lit_False,
-        lit_num, int_add, int_mul,
-        bool_or, bool_and, bool_not,
-        arr_zeros,
-        add_row,
-        identifier,
-        smush,
-        conditional,
-        ret,
-        function_definition]
-    c = Checker(rules, return_type=T.parse('array[3]'))
 
-    def try_check(s):
+    def try_check(s, careful=False):
+        rules = [
+            module, assign,
+            lit_None, lit_True, lit_False,
+            lit_num, int_add, int_mul,
+            bool_or, bool_and, bool_not,
+            arr_zeros,
+            add_row,
+            identifier,
+            smush,
+            conditional,
+            ret,
+            function_definition]
+        c = Checker(rules, return_type=T.parse('array[3]'), careful=careful)
         try:
             c.check(A.parse(s))
-            print(s)
-        except (ValueError, ConfusionError) as e:
-            print(e)
+            print('OK')
+        except (ValueError, ConfusionError, CheckError) as e:
+            if type(e) is CheckError:
+                print(e.pretty(s))
+            else:
+                print(e)
 
     try_check('''
 a = True
