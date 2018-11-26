@@ -70,7 +70,7 @@ class Type:
 
     @staticmethod
     def fresh_all(types):
-        renaming = dict(zip((name for t in types for name in t.names()), fresh_ids)
+        renaming = dict(zip((name for t in types for name in t.names()), fresh_ids))
         return [t.renamed(renaming) for t in types]
 
     @staticmethod
