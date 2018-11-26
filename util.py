@@ -17,13 +17,13 @@ cant_unify = lambda a, b, reason='': \
 def to_quantified_z3(a):
     import z3
     t = list(a.tvars())
-    e = list(e.evars())
+    e = list(a.evars())
     ex = z3.Exists(e, a.to_z3()) if len(e) > 0 else a.to_z3()
     return z3.ForAll(t, ex) if len(t) > 0 else ex
 
 def verify(a):
     import z3
-    F = to_quantified_z3(state)
+    F = to_quantified_z3(a)
 
     s = z3.Solver()
     s.add(F)
@@ -31,3 +31,5 @@ def verify(a):
         raise ValueError(
             'Unsatisfiable constraint: ' +
             str(F))
+
+    return a
