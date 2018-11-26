@@ -76,12 +76,11 @@ class Checker:
     def check(self, ast):
         import z3
 
-        pairs = self.analyze([S.Context()], ast)
-        state = S.State([s for s, _ in pairs])
-
         try:
+            pairs = self.analyze([S.Context()], ast)
+            state = S.State([s for s, _ in pairs])
             return U.verify(state)
-        except ValueError as e:
+        except (ValueError, CheckError) as e:
             if not self.careful:
                 Checker(self.rules, self.return_type, careful=True).check(ast)
             else:
@@ -89,21 +88,20 @@ class Checker:
 
 # -------------------- basic type-checking rules --------------------
 
-def analyze_body(self, context, **kwargs):
-    _, body = list(kwargs.items())[0]
+def analyze_body(self, context, body, k = lambda s, a: [(s, a)]):
     if body == []:
-        return [(context, None)]
+        return k(context, None)
     h, t = body[0], body[1:]
     return self.analyze([context], h, lambda new_context, _:
-        analyze_body(self, new_context, **{'body': t}))
+        analyze_body(self, new_context, t, k))
 
 module = Rule(P.raw_pattern('__body'), analyze_body, 'module')
 
 def analyze_conditional(self, context, t, top, bot):
     top_context = context.copy().assume(t)
     bot_context = context.copy().assume(T.Not(t))
-    top_results = analyze_body(self, top_context, **{'body': top})
-    bot_results = analyze_body(self, bot_context, **{'body': bot})
+    top_results = analyze_body(self, top_context, top)
+    bot_results = analyze_body(self, bot_context, bot)
     return top_results + bot_results
 
 conditional = Rule(P.make_pattern('''
@@ -186,16 +184,19 @@ identifier = Rule(
 
 def fundef(self, context, f, args, return_type, body):
     arg_types = []
+    nested_context = context.copy()
     for arg in args:
         a, t = T.from_ast(arg)
-        context.annotate(a, t)
+        nested_context.annotate(a, t)
         arg_types.append(t)
     r = T.from_ast(return_type)
-    context.annotate(f, T.Fun(T.Tuple(arg_types), r))
+    fun_type = T.Fun(T.Tuple(arg_types), r)
+    nested_context.annotate(f, fun_type)
     return analyze_body(
         Checker(self.rules, return_type=r, careful=self.careful),
-        context,
-        **{'body': body})
+        nested_context, body,
+        lambda new_context, _: (lambda _:
+            [(context.annotate(f, fun_type), None)])(U.verify(new_context)))
 
 function_definition = Rule(P.make_pattern('''
 def _f(__args) -> _return_type:
@@ -328,5 +329,5 @@ def f(p : bool, n : int) -> array[n + 2]:
 def succ(a : int) -> int:
     return a + 1
 n = 3
-a = succ(n)
+a = np.zeros(succ(n))
 ''')
