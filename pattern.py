@@ -117,9 +117,11 @@ def matches(pattern, query):
     for k in pattern._fields:
         v = pattern.__getattribute__(k)
         v1 = query.__getattribute__(k)
-        # capture function definition name or argument name
-        if type(pattern) is ast.FunctionDef and k == 'name' and pattern.name.startswith('_') or \
-           type(pattern) is ast.arg and k == 'arg' and pattern.arg.startswith('_'):
+        # capture function definition name or argument name or import alias
+        if type(pattern) is ast.FunctionDef and k == 'name' and v.startswith('_') or \
+           type(pattern) is ast.arg and k == 'arg' and v.startswith('_') or \
+           type(pattern) is ast.alias and (k == 'name' or k == 'asname') and \
+               v is not None and v.startswith('_'):
             v = ast.parse(v).body[0].value
         c = matches(v, v1)
         if c is None:
@@ -205,3 +207,5 @@ if __name__ == '__main__':
         ast.parse('_f(__a)'),
         ast.parse('g(1, 2, 3)'))))
     print(pretty_parse('a.b.c'))
+    print(pretty_parse('import numpy as _np'))
+    print(pretty_parse('print("hi")'))

@@ -9,7 +9,7 @@ import nptype as T
 # names of arguments should match names of capture groups in pattern
 class Rule:
     def __init__(self, pattern, action, name=None):
-        self.pattern = pattern
+        self.pattern = P.make_pattern(pattern) if type(pattern) is str else pattern
         self.action = action
         self.name = name
 
@@ -32,7 +32,7 @@ class CheckError(ASTError):
 
     # pretty-print the error, where s is the source code that was being analyzed
     def pretty(self, s):
-        pretty = lambda e: (e.pretty(s) if type(e) is CheckError else str(e))
+        pretty = lambda e: (e.pretty(s) if type(e) in (CheckError, ConfusionError) else str(e))
         snippet = ''
         if any(type(e) is not CheckError for _, e in self.errors):
             snippet = U.highlight(self.ast, s) + '\n'
@@ -47,7 +47,7 @@ class ConfusionError(ASTError):
 
 # type-checker acting on a set of checking rules
 class Checker:
-    def __init__(self, rules, return_type=T.TNone(), careful=True):
+    def __init__(self, rules, return_type=T.TNone(), careful=False):
         self.rules = rules
         self.return_type = return_type
         self.careful = careful
@@ -73,7 +73,7 @@ class Checker:
                     new_pairs = [b for s, a in new_pairs for b in f(s, a)]
                     pairs.extend(new_pairs)
                     break
-                except (ValueError, CheckError) as e:
+                except (ValueError, CheckError, ConfusionError) as e:
                     errors.append((rule, e))
             else:
                 if errors == []:
@@ -170,6 +170,8 @@ lambda self, context, p, top, bot:
         analyze_cond(self, new_context, t, top, bot)),
 'cond')
 
+skip = Rule('pass', lambda self, context: [(context, None)], 'skip')
+
 def analyze_cond_expr(self, context, t, l, r, k=no_op):
     top_context = context.copy().assume(t)
     bot_context = context.copy().assume(T.Not(t))
@@ -257,11 +259,19 @@ def analyze_fun_call(self, context, f, args):
 
 fun_call = Rule(P.make_pattern('_f(__args)'), analyze_fun_call, 'fun_call')
 
+print_expr = expression('print(_a)', {'a': T.TVar('a')}, T.TNone(), 'print_expr')
+print_stmt = Rule(
+    P.raw_pattern('print(_a)').body[0],
+    lambda self, context, a:
+        self.analyze([context], a, lambda new_context, inferred_type:
+            [(new_context, None)]))
+
 # -------------------- basic rule set --------------------
 
 basic_rules = [
     module,
     assign,
+    skip,
     ident,
     attr_ident,
     lit_None, lit_True, lit_False, lit_num,
@@ -269,7 +279,9 @@ basic_rules = [
     cond, cond_expr,
     fun_def,
     fun_call,
-    ret]
+    ret,
+    print_expr,
+    print_stmt]
 
 if __name__ == '__main__':
     arr_zeros = expression('np.zeros(_a)', {'a': 'int(a)'}, 'array[int(a)]', 'arr_zeros')

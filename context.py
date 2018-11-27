@@ -10,7 +10,6 @@ class Context:
         self.σ = S.Substitution(lambda a, b: a << b)
         self.Γ = {}
         self.F = T.BLit(True)
-        self.history = []
 
     def __str__(self):
         return '{} -> {} ({})'.format(self.F, U.typedict(self.Γ), self.σ)
