@@ -85,8 +85,12 @@ class CheckError(ASTError):
             return header + ''.join('\n' + pretty(e) for e in confusion_errors)
 
         coords = {U.coords(p[-2].ast) for p in paths}
-        return '\n'.join(U.code_pointers(row, [c for r, c in coords if r == row], s)
-            for row in {r for r, _ in coords})
+        footer = '' if summary == '' else summary + '\n'
+        return '{}{}'.format(
+            '\n'.join(
+                U.code_pointers(row, [c for r, c in coords if r == row], s)
+                for row in {r for r, _ in coords}),
+            footer)
 
 # no suitable pattern
 class ConfusionError(ASTError):
