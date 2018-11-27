@@ -9,9 +9,16 @@ import nptype as T
 # names of arguments should match names of capture groups in pattern
 class Rule:
     def __init__(self, pattern, action, name=None):
+        self.s = pattern if type(pattern) is str else None
         self.pattern = P.make_pattern(pattern) if type(pattern) is str else pattern
         self.action = action
         self.name = name
+
+    def __str__(self):
+        if self.s is not None:
+            return '{} ({})'.format(self.s, self.name)
+        else:
+            return '{} ({})'.format(P.pretty(P.explode(self.pattern)), self.name)
 
 class ASTError(Exception):
     def __init__(self, ast):
@@ -116,10 +123,10 @@ def expression(s, assumptions, return_type, name=None):
             return self.analyze([context], ast, lambda new_context, inferred_type:
                 loop(new_context, tail, analyzed + [(name, inferred_type)]))
         return loop(context, list(kwargs.items()), [])
-    return Rule(P.make_pattern(s), f, name)
+    return Rule(s, f, name)
 
 def literal(s, t, name=None):
-    return Rule(P.make_pattern(s), lambda _, context: [(context, t)], name)
+    return Rule(s, lambda _, context: [(context, t)], name)
 
 # binary infix operator op and corresponding variable type v and type constructor f
 def binary_operator(op, v, f, name=None):
@@ -159,12 +166,12 @@ def analyze_cond(self, context, t, top, bot, k=no_op):
         for s, a in top_results + bot_results
         for b in k(s, a)]
 
-cond = Rule(P.make_pattern('''
+cond = Rule('''
 if _p:
     __top
 else:
     __bot
-'''),
+''',
 lambda self, context, p, top, bot:
     self.analyze([context], p, lambda new_context, t:
         analyze_cond(self, new_context, t, top, bot)),
@@ -182,7 +189,7 @@ def analyze_cond_expr(self, context, t, l, r, k=no_op):
         for b in k(s, a)]
 
 cond_expr = Rule(
-    P.make_pattern('_l if _p else _r'),
+    '_l if _p else _r',
     lambda self, context, l, p, r:
         self.analyze([context], p, lambda new_context, t:
             analyze_cond_expr(self, new_context, t, l, r)),
@@ -200,13 +207,13 @@ def analyze_assign(self, context, lhs, rhs):
         return [(new_context, None)]
     return self.analyze([context], rhs, k)
 
-assign = Rule(P.make_pattern('_lhs = _rhs'), analyze_assign, 'assign')
+assign = Rule('_lhs = _rhs', analyze_assign, 'assign')
 
 def analyze_ident(self, context, a):
     return [(context, context.typeof(U.ident2str(a)))]
 
-ident = Rule(P.make_pattern('a__Name'), analyze_ident, 'ident')
-attr_ident = Rule(P.make_pattern('a__Attribute'), analyze_ident, 'attr_ident')
+ident = Rule('a__Name', analyze_ident, 'ident')
+attr_ident = Rule('a__Attribute', analyze_ident, 'attr_ident')
 
 def analyze_fun_def(self, context, f, args, return_type, body):
     arg_types = []
@@ -224,9 +231,9 @@ def analyze_fun_def(self, context, f, args, return_type, body):
         lambda new_context, _: (lambda _:
             [(context.annotate(f, fun_type), None)])(U.verify(new_context)))
 
-fun_def = Rule(P.make_pattern('''
+fun_def = Rule('''
 def _f(__args) -> _return_type:
-    __body'''), analyze_fun_def, 'fun_def')
+    __body''', analyze_fun_def, 'fun_def')
 
 lit_None = literal('None', T.TNone())
 lit_True = literal('True', T.BLit(True))
@@ -236,12 +243,12 @@ bool_or = binary_operator('or', T.BVar, T.Or, 'bool_or')
 bool_and = binary_operator('and', T.BVar, T.And, 'bool_and')
 bool_not = expression('not _a', {'a': 'bool(a)'}, 'not bool(a)', 'bool_not')
 
-lit_num = Rule(P.make_pattern('num__Num'), lambda _, context, num:
+lit_num = Rule('num__Num', lambda _, context, num:
     [(context, T.ALit(int(num.n)))], 'lit_num')
 int_add = binary_operator('+', T.AVar, T.Add, 'int_add')
 int_mul = binary_operator('*', T.AVar, T.Mul, 'int_mul')
 
-ret = Rule(P.make_pattern('return _a'), lambda self, context, a:
+ret = Rule('return _a', lambda self, context, a:
     self.analyze([context], a, lambda new_context, t:
         [(new_context.unify(self.return_type, t), None)]), 'return')
 
@@ -257,7 +264,7 @@ def analyze_fun_call(self, context, f, args):
             loop(new_context, t, arg_types + [inferred_type]))
     return loop(context, args, [])
 
-fun_call = Rule(P.make_pattern('_f(__args)'), analyze_fun_call, 'fun_call')
+fun_call = Rule('_f(__args)', analyze_fun_call, 'fun_call')
 
 print_expr = expression('print(_a)', {'a': T.TVar('a')}, T.TNone(), 'print_expr')
 print_stmt = Rule(
@@ -290,7 +297,7 @@ if __name__ == '__main__':
         'smush(_a, _b)',
         {'a': 'array[int(a)]', 'b': 'array[int(a)]'},
         'array[int(a)]', 'smush')
-    import_numpy = Rule(P.make_pattern('import numpy as np'),
+    import_numpy = Rule('import numpy as np',
         lambda self, context: extend(self, context, {
             'np.ones': 'Fun((int(a),), array[a])'}),
         'import_numpy')
