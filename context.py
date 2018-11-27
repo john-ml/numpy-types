@@ -17,6 +17,31 @@ class Context:
     def __contains__(self, a):
         return a in self.Γ
 
+    def reduced(self):
+        names_of = lambda a: a.names() if hasattr(a, 'names') else set()
+        renaming = dict(zip(sorted({name
+            for a, t in self.σ.m.items()
+            for name in names_of(a) | names_of(t)}), U.make_fresh()))
+        renamed = lambda a: a.renamed(renaming) if hasattr(a, 'under') else a
+
+        c = Context()
+        c.σ = S.Substitution(self.σ.compare)
+        c.σ.m = dict((renamed(k), renamed(v)) for k, v in self.σ.m.items())
+        c.σ.equalities = {(renamed(l), renamed(r)) for l, r in self.σ.equalities}
+        c.σ.bias = self.σ.bias
+        c.Γ = dict((renamed(k), renamed(v)) for k, v in self.Γ.items())
+        c.F = renamed(self.F)
+        return c
+
+    def __hash__(self):
+        self = self.reduced()
+        return hash((self.σ, tuple(self.Γ.items()), self.F))
+
+    def __eq__(self, other):
+        self = self.reduced()
+        other = other.reduced()
+        return (self.σ, self.Γ, self.F) == (other.σ, other.Γ, other.F)
+
     def copy(self):
         c = Context()
         c.σ = self.σ.copy()

@@ -17,24 +17,18 @@ class Substitution:
         return '{' + ', '.join(str(k) + ' -> ' + str(v) for k, v in self.m.items()) + '}' + \
             (' where ' + constraints if constraints != '' else '')
 
+    def __hash__(self):
+        return hash((tuple(self.m.items()), tuple(self.equalities)))
+
+    def __eq__(self, other):
+        return (self.m, self.equalities) == (other.m, other.equalities)
+
     def copy(self):
         σ = Substitution(self.compare)
         σ.m = dict(self.m)
         σ.equalities = set(self.equalities)
         σ.bias = self.bias
         return σ
-
-    def push(self):
-        self.history.append((dict(self.m), set(self.equalities), self.bias))
-        return self
-
-    def pop(self):
-        self.history.pop()
-        return self
-
-    def undo(self):
-        self.m, self.equalities, self.bias = self.history.pop()
-        return self
 
     def find(self, a):
         traversed = []

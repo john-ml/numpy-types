@@ -12,6 +12,13 @@ on = lambda f, g: lambda a, b: f(g(a), g(b))
 eq = lambda a, b: a == b
 zipwith = lambda f, a: (f(l, r) for l, r in a)
 
+def make_fresh():
+    i = 0
+    while True:
+        yield str(i)
+        i += 1
+fresh_ids = make_fresh()
+
 def coords(ast):
     import ast as A
     row = ast.lineno - 1 if type(ast) is not A.Module else 0

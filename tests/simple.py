@@ -7,6 +7,7 @@ def f(p: bool, n: int) -> n + 2:
     else:
         pass
     return n + 1 if p else n + 2
+f = num.ones(0) + 1 * 3
 
 a = 3
 a = f(True, 3)
@@ -23,4 +24,6 @@ print(u)
 u = u + 1
 print(u)
 
-g = (num.zeros(d.shape[0] + 2) + num.zeros(d.shape[1]) * 3)
+g = num.ones(d.shape[0] + 1) + num.zeros(d.shape[1]) * 3
+g = g - 5
+print(g)

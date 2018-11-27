@@ -1,6 +1,7 @@
 from checker import *
 from nptype import *
 from context import *
+import util as U
 import sys
 import ast
 
@@ -10,7 +11,7 @@ if len(sys.argv) < 2:
 
 def numpy_rules(alias):
     P = lambda s: s.replace('np.', alias + '.')
-    def all_overloads(f, n=5):
+    def all_overloads(f, n=2):
         c = 'a'
         s = [c]
         results = []
@@ -24,7 +25,7 @@ def numpy_rules(alias):
         p = P('_a {} _b'.format(op))
         arg_types = lambda s: {'a': arr_type(s), 'b': arr_type(s)}
         same_dims = lambda s: [expression(p, arg_types(s), arr_type(s), '{}({})'.format(name, s))]
-        fresh_int = lambda: AVar(TVar(next(fresh_ids)))
+        fresh_int = lambda: AVar(TVar(next(U.fresh_ids)))
         scalar_broadcast = lambda s: [
             expression(p, {'a': fresh_int(), 'b': arr_type(s)}, arr_type(s),
                 '{}({})_left_scalar'.format(name, s)),
@@ -80,3 +81,9 @@ with open(sys.argv[1]) as f:
         print(e.pretty(s))
     except Exception as e:
         print(e)
+
+    #for (ast, contexts, action), (hits, _) in sorted(memo.items(), key=lambda a: a[1][0]):
+    #    print('{}\n{} hits ({})'.format(U.highlight(ast, s), hits, type(ast).__name__))
+    #    print('Contexts:')
+    #    for c in contexts:
+    #        print(str(c))

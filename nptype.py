@@ -4,15 +4,6 @@ import ast as A
 import substitution as S
 import z3
 
-# infinite stream of fresh identifiers
-def make_fresh():
-    i = 0
-    while True:
-        yield str(i)
-        i += 1
-fresh_ids = make_fresh()
-del make_fresh
-
 class Type:
     def __str__(self):
         pass
@@ -35,7 +26,7 @@ class Type:
     def to_z3(self):
         return True
     def fresh(self):
-        return self.renamed(dict(zip(self.names(), fresh_ids)))
+        return self.renamed(dict(zip(self.names(), U.fresh_ids)))
     def flipped(self):
         pass
     # partial ordering of types, for unification
@@ -70,7 +61,7 @@ class Type:
 
     @staticmethod
     def fresh_all(types):
-        renaming = dict(zip((name for t in types for name in t.names()), fresh_ids))
+        renaming = dict(zip((name for t in types for name in t.names()), U.fresh_ids))
         return [t.renamed(renaming) for t in types]
 
     @staticmethod
@@ -171,7 +162,7 @@ class TNone(Type):
     def under(self, σ):
         return self
     def to_z3(self, context=type):
-        return z3.Int(next(fresh_ids)) # TODO: replace with something reasonable
+        return z3.Int(next(U.fresh_ids)) # TODO: replace with something reasonable
     def flipped(self):
         return self
 
@@ -551,8 +542,8 @@ def from_ast(ast):
         ('_a : bool', lambda a: (a, BVar(TVar(a)))),
         ('_a : _t', lambda a, t: (a, go(t))),
 
-        ('int', lambda: AVar(EVar(next(fresh_ids)))),
-        ('bool', lambda: BVar(EVar(next(fresh_ids)))),
+        ('int', lambda: AVar(EVar(next(U.fresh_ids)))),
+        ('bool', lambda: BVar(EVar(next(U.fresh_ids)))),
         ('a__Name', lambda a: name2var(a)),
 
         ('Fun(_a, _b)', lambda a, b: Fun(go(a), go(b))),

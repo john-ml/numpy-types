@@ -57,8 +57,10 @@ class CheckError(ASTError):
         if len(paths) == 1:
             return pretty(paths[0])
 
-        value_errors = [p for p in paths if type(p[-1]) is ValueError and 'Unbound identifier' not in str(p[-1])]
-        unbound_idents = [p for p in paths if type(p[-1]) is ValueError and 'Unbound identifier' in str(p[-1])]
+        value_errors = [p for p in paths
+            if type(p[-1]) is ValueError and 'Unbound identifier' not in str(p[-1])]
+        unbound_idents = [p for p in paths
+            if type(p[-1]) is ValueError and 'Unbound identifier' in str(p[-1])]
         unif_errors = [p for p in paths if type(p[-1]) is T.UnificationError]
         grouped_unif_errors = {}
         for reason in {p[-1].reason for p in unif_errors}:
@@ -85,12 +87,11 @@ class CheckError(ASTError):
             return header + ''.join('\n' + pretty(e) for e in confusion_errors)
 
         coords = {U.coords(p[-2].ast) for p in paths}
-        footer = '' if summary == '' else summary + '\n'
         return '{}{}'.format(
             '\n'.join(
                 U.code_pointers(row, [c for r, c in coords if r == row], s)
                 for row in {r for r, _ in coords}),
-            footer)
+            summary)
 
 # no suitable pattern
 class ConfusionError(ASTError):
@@ -99,7 +100,10 @@ class ConfusionError(ASTError):
     def pretty(self, s):
         return '{}\nNo applicable rule'.format(U.highlight(self.ast, s))
 
+no_op = lambda s, a: [(s, a)]
+
 # type-checker acting on a set of checking rules
+memo = {}
 class Checker:
     def __init__(self, rules, return_type=T.TNone(), careful=False):
         self.rules = rules
@@ -114,26 +118,49 @@ class Checker:
     # -> [Context * b]
     # fail with ConfusionError if no rules match
     # fail with CheckError if all rules that matched threw
-    def analyze(self, contexts, ast, f = lambda s, a: [(s, a)]):
-        pairs = []
-        for context in contexts:
-            errors = []
-            for rule in self.rules:
-                try:
-                    matches = P.matches(rule.pattern, ast)
-                    if matches is None:
-                        continue
-                    new_pairs = rule.action(self, context.copy(), **matches)
-                    new_pairs = [b for s, a in new_pairs for b in f(s, a)]
-                    pairs.extend(new_pairs)
-                    break
-                except (ValueError, CheckError, ConfusionError, T.UnificationError) as e:
-                    errors.append((rule, e))
-            else:
-                if errors == []:
-                    raise ConfusionError(ast)
-                raise CheckError(ast, errors)
-        return pairs
+    def analyze(self, contexts, ast, f = no_op):
+        k = (ast, tuple(contexts), None)
+        if k not in memo:
+            options = []
+            for context in contexts:
+                errors = []
+                for rule in self.rules:
+                    try:
+                        matches = P.matches(rule.pattern, ast)
+                        if matches is None:
+                            continue
+                        options.append((
+                            rule,
+                            rule.action(self, context.copy(), **matches)))
+                    except (ValueError, CheckError, ConfusionError, T.UnificationError) as e:
+                        errors.append((rule, e))
+            if options == []:
+                e = ConfusionError(ast) if errors == [] else CheckError(ast, errors)
+                memo[k] = (1, e)
+                raise e
+
+            memo[k] = (1, options)
+        else:
+            n, a = memo[k]
+            memo[k] = (n + 1, a)
+            if isinstance(a, Exception):
+                raise a
+            options = a
+
+        results = []
+        errors = []
+        for rule, option in options:
+            try:
+                results.extend([b for s, a in option for b in f(s, a)])
+                break
+            except (ValueError, CheckError, ConfusionError, T.UnificationError) as e:
+                errors.append((rule, e))
+        else:
+            if errors == []:
+                raise ConfusionError(ast)
+            raise CheckError(ast, errors)
+
+        return results
 
     def check(self, ast):
         try:
@@ -141,6 +168,7 @@ class Checker:
             state = C.State([s for s, _ in pairs])
             return U.verify(state)
         except (ValueError, CheckError, T.UnificationError) as e:
+            raise
             if not self.careful:
                 Checker(self.rules, self.return_type, careful=True).check(ast)
             else:
@@ -159,7 +187,7 @@ def expression(s, assumptions, return_type, name=None):
         def loop(context, pairs, analyzed):
             if pairs == []:
                 # TODO better way of naming
-                renaming = dict(zip(names, map(lambda a: 'tmp' + a, T.fresh_ids)))
+                renaming = dict(zip(names, map(lambda a: 'tmp' + a, U.fresh_ids)))
                 instantiate = lambda t: t.renamed(renaming).flipped()
                 for name, inferred_type in analyzed:
                     context.unify(inferred_type, instantiate(assumptions[name]))
@@ -180,8 +208,6 @@ def binary_operator(op, v, f, name=None):
         {'a': v(T.parse('a')), 'b': v(T.parse('b'))},
         f(v(T.parse('a')), v(T.parse('b'))),
         name)
-
-no_op = lambda s, a: [(s, a)]
 
 # extend an environment
 def extend(self, context, bindings, k=no_op):
