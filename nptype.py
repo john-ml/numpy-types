@@ -465,6 +465,18 @@ class Fun(Type):
 
 # -------------------- unification --------------------
 
+class UnificationError(Exception):
+    def __init__(self, a, b, reason):
+        self.a = a
+        self.b = b
+        self.reason = reason
+
+    def __str__(self):
+        return "Can't unify '{}' with '{}'{}".format( \
+            self.a,
+            self.b,
+            ('' if self.reason == '' else ' ({})'.format(self.reason)))
+
 # update σ : Substitution ∪ Context to unify a and b or fail with ValueError
 # return pointer to σ
 def unify(a, b, σ):
@@ -475,7 +487,7 @@ def unify(a, b, σ):
     if EVar in (type(a), type(b)):
         e, t = (a, b) if type(a) is EVar else (b, a)
         if e in t.evars():
-            raise U.cant_unify(a, b, 'occurs check failed')
+            raise UnificationError(a, b, 'occurs check failed')
         return σ.union(a, b)
 
     # lifted variables
@@ -484,12 +496,12 @@ def unify(a, b, σ):
             return σ.union(a, b)
         else:
             assert type(a.var) is type(b.var) is TVar
-            raise U.cant_unify(a, b, 'two rigid type variables')
+            raise UnificationError(a, b, 'two rigid type variables')
 
     # literals
     elif type(a) is type(b) is ALit or type(a) is type(b) is BLit:
         if a.value != b.value:
-            raise U.cant_unify(a, b, 'unequal values')
+            raise UnificationError(a, b, 'unequal values')
         return σ
 
     # defer arithmetic or boolean expressions to z3
@@ -498,17 +510,17 @@ def unify(a, b, σ):
         return σ.union(a, b)
 
     elif type(a) is not type(b):
-        raise U.cant_unify(a, b, 'incompatible types')
+        raise UnificationError(a, b, 'incompatible types')
 
     elif type(a) is TVar and a != b:
-        raise U.cant_unify(a, b, 'two rigid type variables')
+        raise UnificationError(a, b, 'two rigid type variables')
 
     elif type(a) is Fun:
         return unify(a.a, b.a, unify(a.b, b.b, σ))
 
     elif type(a) in (Array, Tuple):
         if len(a) != len(b):
-            raise U.cant_unify(a, b, 'unequal lengths')
+            raise UnificationError(a, b, 'unequal lengths')
         for l, r in zip(a, b):
             unify(l, r, σ)
         return σ

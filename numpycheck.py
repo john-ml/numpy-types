@@ -19,9 +19,9 @@ def numpy_rules(alias):
             c = chr(ord(c) + 1)
             s.append(c)
         return results
+    arr_type = lambda s: parse('array[{}]'.format(s))
     def binop(op, name):
         p = P('_a {} _b'.format(op))
-        arr_type = lambda s: parse('array[{}]'.format(s))
         arg_types = lambda s: {'a': arr_type(s), 'b': arr_type(s)}
         same_dims = lambda s: [expression(p, arg_types(s), arr_type(s), '{}({})'.format(name, s))]
         fresh_int = lambda: AVar(TVar(next(fresh_ids)))
@@ -37,9 +37,20 @@ def numpy_rules(alias):
             dict((v, AVar(TVar(v))) for v in a),
             parse('array[{}]'.format(', '.join(a))),
             '{}({})'.format(name, ', '.join(a)))])
+    def make_shape_rules(a):
+        rules = []
+        for i in range(len(a)):
+            rules.append(expression(
+                P('_a.shape[_i]'),
+                {'a': arr_type(', '.join(a)), 'i': ALit(i)},
+                AVar(TVar(a[i])),
+                'shape({})({})'.format(', '.join(a), i)))
+        return rules
+    shape = all_overloads(make_shape_rules)
     return (
         constructor('zeros') +
         constructor('ones') +
+        shape +
         binop('+', 'plus') +
         binop('-', 'minus') +
         binop('*', 'times') +
@@ -47,7 +58,7 @@ def numpy_rules(alias):
         binop('**', 'pow'))
 
 def analyze_import_numpy(self, context, np):
-    self.rules += numpy_rules(np)
+    self.rules = numpy_rules(np) + self.rules
     return [(context, None)]
 
 rules = basic_rules + [

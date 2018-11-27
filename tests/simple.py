@@ -22,3 +22,5 @@ print(u)
 
 u = u + 1
 print(u)
+
+g = (num.zeros(d.shape[0] + 2) + num.zeros(d.shape[1]) * 3)

@@ -11,19 +11,23 @@ mapreduce = lambda f, g, a, e: reduce(f, map(g, a), e)
 on = lambda f, g: lambda a, b: f(g(a), g(b))
 eq = lambda a, b: a == b
 zipwith = lambda f, a: (f(l, r) for l, r in a)
-cant_unify = lambda a, b, reason='': \
-    ValueError("Can't unify '{}' with '{}'{}".format( \
-        a, b, ('' if reason == '' else ' ({})'.format(reason))))
 
-def highlight(ast, s):
+def coords(ast):
     import ast as A
     row = ast.lineno - 1 if type(ast) is not A.Module else 0
     col = ast.col_offset if type(ast) is not A.Module else 0
+    return row, col
+
+def code_pointers(row, cols, s):
     return 'at {}:{}:\n{}\n{}'.format(
         row + 1,
-        col + 1,
+        ','.join(str(a + 1) for a in sorted(cols)),
         s.split('\n')[row],
-        ' ' * col + '^')
+        ''.join(('^' if i in cols else ' ') for i in range(max(cols) + 1)))
+
+def highlight(ast, s):
+    row, col = coords(ast)
+    return code_pointers(row, [col], s)
 
 def ident2str(a):
     import ast as A

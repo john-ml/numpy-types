@@ -39,18 +39,61 @@ class CheckError(ASTError):
 
     # pretty-print the error, where s is the source code that was being analyzed
     def pretty(self, s):
-        pretty = lambda e: (e.pretty(s) if type(e) in (CheckError, ConfusionError) else str(e))
-        snippet = ''
-        if any(type(e) is not CheckError for _, e in self.errors):
-            snippet = U.highlight(self.ast, s) + '\n'
-        return snippet + '\n\n'.join(pretty(e) for _, e in self.errors)
+        def error_paths(self):
+            if type(self) is not CheckError:
+                return [[self]]
+            paths = []
+            for _, e in self.errors:
+                paths.extend([[self] + p for p in error_paths(e)])
+            return paths
+
+        paths = error_paths(self)
+
+        def pretty(e):
+            if type(e[-1]) is ConfusionError:
+                return e[-1].pretty(s)
+            return '{}\n{}'.format(U.highlight(e[-2].ast, s), str(e[-1]))
+
+        if len(paths) == 1:
+            return pretty(paths[0])
+
+        value_errors = [p for p in paths if type(p[-1]) is ValueError and 'Unbound identifier' not in str(p[-1])]
+        unbound_idents = [p for p in paths if type(p[-1]) is ValueError and 'Unbound identifier' in str(p[-1])]
+        unif_errors = [p for p in paths if type(p[-1]) is T.UnificationError]
+        grouped_unif_errors = {}
+        for reason in {p[-1].reason for p in unif_errors}:
+            grouped_unif_errors[reason] = [p for p in unif_errors if p[-1].reason == reason]
+        confusion_errors = [p for p in paths if type(p[-1]) is ConfusionError]
+
+        summary = ''
+        if len(value_errors) > 0:
+            summary = '{} value errors'.format(len(value_errors))
+        if len(unbound_idents) > 0:
+            summary += '\n{} unbound identifier errors'.format(len(unbound_idents))
+        if len(grouped_unif_errors.items()) > 0:
+            for reason, paths in grouped_unif_errors.items():
+                summary += '\n{} unification errors ({})'.format(len(paths), reason)
+        if len(confusion_errors) > 0:
+            summary += '\n{} confusion errors'.format(len(confusion_errors))
+
+        if len(value_errors) > 0:
+            header = '' if summary == '' else 'Among\n' + U.indent('  ', summary)
+            return header + ''.join('\n' + pretty(e) for e in value_errors)
+
+        if len(confusion_errors) > 0:
+            header = '' if summary == '' else 'Among\n' + U.indent('  ', summary)
+            return header + ''.join('\n' + pretty(e) for e in confusion_errors)
+
+        coords = {U.coords(p[-2].ast) for p in paths}
+        return '\n'.join(U.code_pointers(row, [c for r, c in coords if r == row], s)
+            for row in {r for r, _ in coords})
 
 # no suitable pattern
 class ConfusionError(ASTError):
     def __init__(self, ast):
         self.ast = ast
     def pretty(self, s):
-        return 'No applicable rule:\n{}'.format(U.highlight(self.ast, s))
+        return '{}\nNo applicable rule'.format(U.highlight(self.ast, s))
 
 # type-checker acting on a set of checking rules
 class Checker:
@@ -80,7 +123,7 @@ class Checker:
                     new_pairs = [b for s, a in new_pairs for b in f(s, a)]
                     pairs.extend(new_pairs)
                     break
-                except (ValueError, CheckError, ConfusionError) as e:
+                except (ValueError, CheckError, ConfusionError, T.UnificationError) as e:
                     errors.append((rule, e))
             else:
                 if errors == []:
@@ -93,7 +136,7 @@ class Checker:
             pairs = self.analyze([C.Context()], ast)
             state = C.State([s for s, _ in pairs])
             return U.verify(state)
-        except (ValueError, CheckError) as e:
+        except (ValueError, CheckError, T.UnificationError) as e:
             if not self.careful:
                 Checker(self.rules, self.return_type, careful=True).check(ast)
             else:
@@ -108,7 +151,7 @@ def expression(s, assumptions, return_type, name=None):
     assumptions = dict((k, to_type(v)) for k, v in assumptions.items())
     return_type = to_type(return_type)
     def f(self, context, **kwargs):
-        names =  {v for _, t in assumptions.items() for v in t.names()} | return_type.names()
+        names = {v for _, t in assumptions.items() for v in t.names()} | return_type.names()
         def loop(context, pairs, analyzed):
             if pairs == []:
                 # TODO better way of naming
@@ -116,8 +159,6 @@ def expression(s, assumptions, return_type, name=None):
                 instantiate = lambda t: t.renamed(renaming).flipped()
                 for name, inferred_type in analyzed:
                     context.unify(inferred_type, instantiate(assumptions[name]))
-                if self.careful:
-                    U.verify(context)
                 return [(context, instantiate(return_type))]
             (name, ast), tail = pairs[0], pairs[1:]
             return self.analyze([context], ast, lambda new_context, inferred_type:
@@ -153,7 +194,7 @@ def analyze_body(self, context, body, k=no_op):
         return k(context, None)
     h, t = body[0], body[1:]
     return self.analyze([context], h, lambda new_context, _:
-        analyze_body(self, new_context, t, k))
+        analyze_body(self, (U.verify(new_context) if self.careful else new_context), t, k))
 
 module = Rule(P.raw_pattern('__body'), analyze_body, 'module')
 
