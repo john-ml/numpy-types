@@ -74,12 +74,13 @@ rules = basic_rules + [
 
 with open(sys.argv[1]) as f:
     s = f.read()
+    c = Checker(rules)
     try:
-        Checker(rules).check(ast.parse(s))
+        c.check(ast.parse(s))
         print('OK')
     except (CheckError, ConfusionError) as e:
         print(e.pretty(s))
     except Exception as e:
         print(e)
 
-    #dump_memo(s)
+    c.dump_memo(s)

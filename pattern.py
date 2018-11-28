@@ -1,20 +1,26 @@
 import ast
 
-# -------------------- pretty printer for AST objects --------------------
+# -------------------- converting AST to basic types --------------------
 
 # convert ast object into tree of dicts and lists
-def explode(a):
+def explode(a, hashable=False):
     if type(a) is list:
-        return list(map(explode, a))
+        l = map(lambda b: explode(b, hashable), a)
+        return tuple(l) if hashable else list(l)
 
     if not hasattr(a, '_fields'):
         return a
     
     fields = {}
     for k in a._fields:
-        fields[k] = explode(a.__getattribute__(k))
+        fields[k] = explode(a.__getattribute__(k), hashable)
 
-    return type(a), fields
+    return (type(a), tuple(fields.items())) if hashable else (type(a), fields)
+
+# make ast comparable/hashable sans info we don't care about for typechecking
+# e.g. line/colno
+def simplify(a):
+    return explode(a, hashable=True)
 
 # exploded tree -> string
 def pretty(exploded, indent='  ', lines=False):

@@ -87,11 +87,12 @@ class CheckError(ASTError):
             return header + ''.join('\n' + pretty(e) for e in confusion_errors)
 
         coords = {U.coords(p[-2].ast) for p in paths}
-        return '{}{}'.format(
+        footer = summary if len(paths) > 10 else '\n'.join({str(p[-1]) for p in paths})
+        return '{}\n{}'.format(
             '\n'.join(
                 U.code_pointers(row, [c for r, c in coords if r == row], s)
                 for row in {r for r, _ in coords}),
-            summary)
+            footer)
 
 # no suitable pattern
 class ConfusionError(ASTError):
@@ -102,66 +103,82 @@ class ConfusionError(ASTError):
 
 no_op = lambda s, a: [(s, a)]
 
-# memoize past queries (remember which rules worked & the results they yielded)
-_memo = {}
-
 # type-checker acting on a set of checking rules
 class Checker:
-    def __init__(self, rules, return_type=T.TNone(), careful=False):
+    def __init__(self, rules, return_type=T.TNone(), careful=False, ast_memo={}, memo={}):
         self.rules = rules
         self.return_type = return_type
         self.careful = careful
+        # memoize past queries (remember which rules worked & the results they yielded)
+        self.ast_memo = {}
+        self.memo = {}
+
+    def carefully(self):
+        return Checker(
+            self.rules,
+            return_type = self.return_type,
+            careful = True,
+            ast_memo = self.ast_memo,
+            memo = self.memo)
+
+    def returning(self, r):
+        return Checker(
+            self.rules,
+            return_type = r,
+            careful = self.careful,
+            ast_memo = self.ast_memo,
+            memo = self.memo)
 
     # try each of the rules in order and run action corresponding to first matching rule
     # Checker * [Context] * AST * (Context * a -> [Context * b]) -> [Context * b]
     # fail with ConfusionError if no rules match
     # fail with CheckError if all rules that matched threw
     def analyze(self, contexts, ast, f = no_op):
+        k_ast = P.simplify(ast)
+        k = (ast, tuple(contexts))
+        possible_errors = (ValueError, CheckError, ConfusionError, T.UnificationError)
 
         # compute results for each applicable pattern
-        k = (ast, tuple(contexts), None)
-        if k in _memo:
-            hits, a = _memo[k]
-            _memo[k] = (hits + 1, a)
-            if isinstance(a, Exception):
-                raise a
+        hits, a = self.memo[k] if k in self.memo else (0, None)
+        options = []
+        if isinstance(a, Exception):
+            raise a
+        if a is not None:
             options = a
+            self.memo[k] = (hits + 1, options)
         else:
+            if k_ast in self.ast_memo:
+                ast_hits, matches = self.ast_memo[k_ast]
+            else:
+                ast_hits = 0
+                matches = [(rule, a)
+                    for rule in self.rules
+                    for a in [P.matches(rule.pattern, ast)]
+                    if a is not None]
+            self.ast_memo[k_ast] = (ast_hits + 1, matches)
+
             options = []
             for context in contexts:
                 errors = []
-                for rule in self.rules:
+                for rule, match in matches:
                     try:
-                        matches = P.matches(rule.pattern, ast)
-                        if matches is None:
-                            continue
-                        options.append((
-                            rule,
-                            rule.action(self, context.copy(), **matches)))
-                    except (ValueError, CheckError, ConfusionError, T.UnificationError) as e:
+                        options.append((rule, rule.action(self, context.copy(), **match)))
+                    except possible_errors as e:
                         errors.append((rule, e))
-            if options == []:
-                e = ConfusionError(ast) if errors == [] else CheckError(ast, errors)
-                _memo[k] = (1, e)
-                raise e
-
-            _memo[k] = (1, options)
+                if options == []:
+                    e = ConfusionError(ast) if errors == [] else CheckError(ast, errors)
+                    self.memo[k] = (1, e)
+                    raise e
+            self.memo[k] = (1, options)
 
         # run continuation with each result
-        results = []
         errors = []
         for rule, option in options:
             try:
-                results.extend([b for s, a in option for b in f(s, a)])
-                break
-            except (ValueError, CheckError, ConfusionError, T.UnificationError) as e:
+                return [b for s, a in option for b in f(s, a)]
+            except possible_errors as e:
                 errors.append((rule, e))
-        else:
-            if errors == []:
-                raise ConfusionError(ast)
-            raise CheckError(ast, errors)
-
-        return results
+        raise ConfusionError(ast) if errors == [] else CheckError(ast, errors)
 
     def check(self, ast):
         try:
@@ -169,17 +186,19 @@ class Checker:
             state = C.State([s for s, _ in pairs])
             return U.verify(state)
         except (ValueError, CheckError, T.UnificationError) as e:
-            if not self.careful:
-                Checker(self.rules, self.return_type, careful=True).check(ast)
+            if not self.careful and 'Unsatisfiable constraint' in str(e):
+                self.carefully().check(ast)
             else:
                 raise
 
-def dump_memo(s):
-    for (ast, contexts, action), (hits, _) in sorted(_memo.items(), key=lambda a: a[1][0]):
-        print('{}\n{} hits ({})'.format(U.highlight(ast, s), hits, type(ast).__name__))
-        print('Contexts:')
-        for c in contexts:
-            print(str(c))
+    def dump_memo(self, s):
+        for ast, (hits, rules) in sorted(self.ast_memo.items(), key=lambda a: a[1][0]):
+            print('{}\n{} hits ({} rules)'.format(ast, hits, len(rules)))
+        for (ast, contexts), (hits, _) in sorted(self.memo.items(), key=lambda a: a[1][0]):
+            print('{}\n{} hits ({})'.format(U.highlight(ast, s), hits, type(ast).__name__))
+            print('Contexts:')
+            for c in contexts:
+                print(str(c.reduced()))
 
 # -------------------- rule/checker combinators --------------------
 
@@ -304,7 +323,7 @@ def analyze_fun_def(self, context, f, args, return_type, body):
     fun_type = T.Fun(T.Tuple(arg_types), r)
     nested_context.annotate(f, fun_type)
     return analyze_body(
-        Checker(self.rules, return_type=r, careful=self.careful),
+        self.returning(r),
         nested_context, body,
         lambda new_context, _: (lambda _:
             [(context.annotate(f, fun_type), None)])(U.verify(new_context)))
@@ -380,9 +399,11 @@ if __name__ == '__main__':
             'np.ones': 'Fun((int(a),), array[a])'}),
         'import_numpy')
 
-    def try_check(s, careful=False):
-        rules = basic_rules + [arr_zeros, add_row, smush, import_numpy]
-        c = Checker(rules, return_type=T.parse('array[3]'), careful=careful)
+    rules = basic_rules + [arr_zeros, add_row, smush, import_numpy]
+    c = Checker(rules, return_type=T.parse('array[3]'))
+
+    def try_check(s):
+        c.careful = False
         try:
             c.check(A.parse(s))
             print('OK')

@@ -387,6 +387,8 @@ class Tuple(Type):
     def __init__(self, items):
         self.items = [Type.lift(a) for a in items]
     def __str__(self):
+        if len(self.items) == 1:
+            return '({},)'.format(self.items[0])
         return '({})'.format(', '.join(str(d) for d in self.items))
     def __eq__(self, other):
         return type(self) is type(other) and self.items == other.items
