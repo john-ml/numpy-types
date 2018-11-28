@@ -576,6 +576,8 @@ b = None
     print(try_check('''
 b = np.zeros(3)
 f = lambda a: add_row(smush(a, b))
-g = lambda f, g: lambda x: f(g(x))
+compose = lambda f, g: lambda x: f(g(x))
 flip = lambda f: lambda a: lambda b: f(b)(a)
 '''))
+
+compose : Fun((Fun(tmp125, tmp128), Fun(tmp121, tmp125)), Fun((tmp121,), tmp128)), flip : Fun((Fun(tmp133, Fun(tmp131, tmp140)),), Fun((tmp131,), Fun((tmp133,), tmp140)))
