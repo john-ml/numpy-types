@@ -73,8 +73,8 @@ class CheckError(ASTError):
         if len(unbound_idents) > 0:
             summary += '\n{} unbound identifier errors'.format(len(unbound_idents))
         if len(grouped_unif_errors.items()) > 0:
-            for reason, paths in grouped_unif_errors.items():
-                summary += '\n{} unification errors ({})'.format(len(paths), reason)
+            for reason, subpaths in sorted(grouped_unif_errors.items(), key=lambda a: -len(a[1])):
+                summary += '\n{} unification errors ({})'.format(len(subpaths), reason)
         if len(confusion_errors) > 0:
             summary += '\n{} confusion errors'.format(len(confusion_errors))
 
@@ -379,19 +379,19 @@ def analyze_fun_call(self, Γ, f, args):
         if l == []:
             arg_type = T.Tuple(arg_types)
             def k(Γ, t):
-                #print('t =', t)
+                print('t =', t)
                 a = next(U.fresh_ids)
                 b = next(U.fresh_ids)
                 Γ.fix({a, b})
                 fn = T.Fun(T.EVar(a), T.EVar(b))
                 Γ.unify(t, fn)
-                #print(t, '~', fn)
-                #print(arg_type.under(Γ), '~', fn.a.under(Γ))
+                print(t, '~', fn)
+                print(arg_type.under(Γ), '~', fn.a.under(Γ))
                 Γ.unify(arg_type, fn.a)
-                #print(
-                #    '=>', fn.b, '=', fn.b.under(Γ),
-                #    'after applying', P.pretty(P.explode(f)))
-                #print('Γ =', Γ)
+                print(
+                    '=>', fn.b, '=', fn.b.under(Γ),
+                    'after applying', P.pretty(P.explode(f)))
+                print('Γ =', Γ)
                 return [(Γ, fn.b)]
             return self.analyze([Γ], f, k)
         h, t = l[0], l[1:]
