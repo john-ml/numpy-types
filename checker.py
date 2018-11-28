@@ -378,23 +378,23 @@ def analyze_fun_call(self, Γ, f, args):
                 fresh_t = Γ.instantiate(t)
                 #print('instantiate({}) = {}'.format(t, fresh_t))
                 if type(fresh_t) is T.EVar:
+                    a = next(U.fresh_ids)
+                    b = next(U.fresh_ids)
+                    Γ.fix({a, b})
                     fresh_fun_t = T.Fun(
-                        T.EVar(next(U.fresh_ids)),
-                        T.EVar(next(U.fresh_ids)))
+                        T.EVar(a),
+                        T.EVar(b))
                     #print(fresh_t, '~', fresh_fun_t)
                     Γ.unify(t, fresh_t)
                     Γ.unify(fresh_t, fresh_fun_t)
                     fresh_t = fresh_fun_t
-                #print(Γ)
-                a = fresh_t.a
-                b = fresh_t.b
-                #print(arg_type.under(Γ), '~', a.under(Γ))
-                Γ.unify(arg_type, a)
+                #print(arg_type.under(Γ), '~', fresh_t.a.under(Γ))
+                Γ.unify(arg_type, fresh_t.a)
                 #print(
-                #    '=>', b, '=', b.under(Γ),
+                #    '=>', fresh_t.b, '=', fresh_t.b.under(Γ),
                 #    'after applying', P.pretty(P.explode(f)))
-                #print(Γ)
-                return [(Γ, b)]
+                #print('Γ =', Γ)
+                return [(Γ, fresh_t.b)]
             return self.analyze([Γ], f, k)
         h, t = l[0], l[1:]
         return self.analyze([Γ], h, lambda new_Γ, inferred_type:
@@ -413,25 +413,25 @@ print_stmt = Rule(
 def analyze_lambda_expr(self, Γ, args, e):
     arg_ids = tuple(U.take(len(args), U.fresh_ids))
     arg_types = [T.EVar(name) for name in arg_ids]
-    nested_Γ = Γ.copy()
+    Γ1 = Γ.copy()
     for a, t in zip(map(U.ident2str, args), arg_types):
-        nested_Γ.annotate(a, t)
-    def k(nested_Γ, t):
-        #print(nested_Γ, 'nested_Γ')
-        #print('t =', t, '=>', t.under(nested_Γ))
+        Γ1.annotate(a, t, fixed=True)
+    def k(Γ2, t):
+        #print('Γ2 =', Γ2)
+        #print('t =', t, '=>', t.under(Γ2))
         #print('args =', ', '.join(map(str, arg_types)))
-        #print(T.Fun(
-        #    T.Tuple(a.under(nested_Γ).gen(arg_ids) for a in arg_types),
-        #    t.under(nested_Γ).gen(arg_ids)))
+        fn = Γ2.gen(T.Fun(T.Tuple(arg_types), t), Γ1.fixed)
+        #print('Fun({}, {}) => {}'.format(T.Tuple(arg_types), t, fn))
         #print('Γ =', Γ)
         for name in Γ.Γ:
-            Γ.unify(Γ.typeof(name), Γ.typeof(name).under(nested_Γ))
+            t_Γ = Γ.typeof(name)
+            t_Γ2 = t_Γ.under(Γ2)
+            Γ.unify(t_Γ, t_Γ2)
+            Γ.fix(t_Γ2.names() & (Γ2.fixed - Γ.fixed))
         #print('new Γ =', Γ)
         #print()
-        return [(Γ, T.Fun(
-            T.Tuple(a.under(nested_Γ).gen() for a in arg_types),
-            t.under(nested_Γ).gen()))]
-    return self.analyze([nested_Γ], e, k)
+        return [(Γ, fn)]
+    return self.analyze([Γ1], e, k)
 
 lambda_expr = Rule('lambda __args: _e', analyze_lambda_expr, 'lambda_expr')
 
@@ -579,5 +579,3 @@ f = lambda a: add_row(smush(a, b))
 compose = lambda f, g: lambda x: f(g(x))
 flip = lambda f: lambda a: lambda b: f(b)(a)
 '''))
-
-compose : Fun((Fun(tmp125, tmp128), Fun(tmp121, tmp125)), Fun((tmp121,), tmp128)), flip : Fun((Fun(tmp133, Fun(tmp131, tmp140)),), Fun((tmp131,), Fun((tmp133,), tmp140)))

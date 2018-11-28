@@ -65,6 +65,14 @@ class Substitution:
         self.hash = None
         return self
 
+    def gen(self, names):
+        m = {}
+        for k, v in self.m.items():
+            m[k.gen(names)] = v.gen(names)
+        self.m = m
+        self.hash = None
+        return self
+
     def equal_pairs(self):
         return self.equalities
 

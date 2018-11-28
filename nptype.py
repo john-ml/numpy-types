@@ -35,6 +35,8 @@ class Type:
         return self.renamed(renaming)
     def eapp(self, blacklist=None):
         pass
+    def flipped(self, blacklist=None):
+        pass
     def gen(self, blacklist=None):
         pass
     # partial ordering of types, for unification
@@ -123,6 +125,8 @@ class UVar(Type):
                z3.Int(self.name) # shrug
     def eapp(self, blacklist=[]):
         return EVar(self.name) if self.name not in blacklist else UVar(self.name)
+    def flipped(self, blacklist=[]):
+        return EVar(self.name) if self.name not in blacklist else UVar(self.name)
     def gen(self, blacklist=[]):
         return UVar(self.name)
 
@@ -157,8 +161,10 @@ class EVar(Type):
                z3.Int(self.name) # shrug
     def eapp(self, blacklist=[]):
         return EVar(self.name)
-    def gen(self, blacklist=[]):
+    def flipped(self, blacklist=[]):
         return UVar(self.name) if self.name not in blacklist else EVar(self.name)
+    def gen(self, blacklist=[]):
+        return UVar(self.name) if self.name in blacklist else EVar(self.name)
 
 # -------------------- none --------------------
 
@@ -184,6 +190,8 @@ class TNone(Type):
     def to_z3(self, context=type):
         return z3.Int(next(U.fresh_ids)) # TODO: replace with something reasonable
     def eapp(self, blacklist=[]):
+        return self
+    def flipped(self, blacklist=[]):
         return self
     def gen(self, blacklist=[]):
         return self
@@ -217,6 +225,8 @@ class ALit(AExp):
         return self.value
     def eapp(self, blacklist=[]):
         return self
+    def flipped(self, blacklist=[]):
+        return self
     def gen(self, blacklist=[]):
         return self
 
@@ -243,6 +253,8 @@ class AVar(AExp):
         return self.var.to_z3(context=int)
     def eapp(self, blacklist=[]):
         return AVar(self.var.eapp(blacklist))
+    def flipped(self, blacklist=[]):
+        return AVar(self.var.flipped(blacklist))
     def gen(self, blacklist=[]):
         return AVar(self.var.gen(blacklist))
 
@@ -270,6 +282,8 @@ class Add(AExp):
         return self.a.to_z3() + self.b.to_z3()
     def eapp(self, blacklist=[]):
         return Add(self.a.eapp(blacklist), self.b.eapp(blacklist))
+    def flipped(self, blacklist=[]):
+        return Add(self.a.flipped(blacklist), self.b.flipped(blacklist))
     def gen(self, blacklist=[]):
         return Add(self.a.gen(blacklist), self.b.gen(blacklist))
 
@@ -297,6 +311,8 @@ class Mul(AExp):
         return self.a.to_z3() * self.b.to_z3()
     def eapp(self, blacklist=[]):
         return Mul(self.a.eapp(blacklist), self.b.eapp(blacklist))
+    def flipped(self, blacklist=[]):
+        return Mul(self.a.flipped(blacklist), self.b.flipped(blacklist))
     def gen(self, blacklist=[]):
         return Mul(self.a.gen(blacklist), self.b.gen(blacklist))
 
@@ -329,6 +345,8 @@ class BLit(BExp):
         return self.value
     def eapp(self, blacklist=[]):
         return self
+    def flipped(self, blacklist=[]):
+        return self
     def gen(self, blacklist=[]):
         return self
 
@@ -355,6 +373,8 @@ class BVar(BExp):
         return self.var.to_z3(context=bool)
     def eapp(self, blacklist=[]):
         return BVar(self.var.eapp(blacklist))
+    def flipped(self, blacklist=[]):
+        return BVar(self.var.flipped(blacklist))
     def gen(self, blacklist=[]):
         return BVar(self.var.gen(blacklist))
 
@@ -382,6 +402,8 @@ class Or(BExp):
         return z3.Or(self.a.to_z3(), self.b.to_z3())
     def eapp(self, blacklist=[]):
         return Or(self.a.eapp(blacklist), self.b.eapp(blacklist))
+    def flipped(self, blacklist=[]):
+        return Or(self.a.flipped(blacklist), self.b.flipped(blacklist))
     def gen(self, blacklist=[]):
         return Or(self.a.gen(blacklist), self.b.gen(blacklist))
 
@@ -409,6 +431,8 @@ class And(BExp):
         return z3.And(self.a.to_z3(), self.b.to_z3())
     def eapp(self, blacklist=[]):
         return And(self.a.eapp(blacklist), self.b.eapp(blacklist))
+    def flipped(self, blacklist=[]):
+        return And(self.a.flipped(blacklist), self.b.flipped(blacklist))
     def gen(self, blacklist=[]):
         return And(self.a.gen(blacklist), self.b.gen(blacklist))
 
@@ -435,6 +459,8 @@ class Not(BExp):
         return z3.Not(self.a.to_z3())
     def eapp(self, blacklist=[]):
         return Not(self.a.eapp(blacklist))
+    def flipped(self, blacklist=[]):
+        return Not(self.a.flipped(blacklist))
     def gen(self, blacklist=[]):
         return Not(self.a.gen(blacklist))
 
@@ -468,6 +494,8 @@ class Tuple(Type):
         return Tuple(a.replaced(replacements) for a in self.items)
     def eapp(self, blacklist=[]):
         return Tuple(a.eapp(blacklist) for a in self.items)
+    def flipped(self, blacklist=[]):
+        return Tuple(a.flipped(blacklist) for a in self.items)
     def gen(self, blacklist=[]):
         return Tuple(a.gen(blacklist) for a in self.items)
 
@@ -497,6 +525,8 @@ class Array(Type):
         return Array(a.replaced(replacements) for a in self.shape)
     def eapp(self, blacklist=[]):
         return Array(a.eapp(blacklist) for a in self.shape)
+    def flipped(self, blacklist=[]):
+        return Array(a.flipped(blacklist) for a in self.shape)
     def gen(self, blacklist=[]):
         return Array(a.gen(blacklist) for a in self.shape)
 
@@ -523,6 +553,8 @@ class Fun(Type):
         return Fun(self.a.replaced(replacements), self.b.replaced(replacements))
     def eapp(self, blacklist=[]):
         return Fun(self.a.eapp(blacklist), self.b.eapp(blacklist))
+    def flipped(self, blacklist=[]):
+        return Fun(self.a.flipped(blacklist), self.b.flipped(blacklist))
     def gen(self, blacklist=[]):
         return Fun(self.a.gen(blacklist), self.b.gen(blacklist))
 

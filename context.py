@@ -82,9 +82,23 @@ class Context:
             raise ValueError('Unbound identifier: ' + a)
         return self.Γ[a].under(self)
 
+    def fix(self, a):
+        self.fixed |= a
+        self.hash = self.simple = None
+        return self
+
+    def gen(self, t, blacklist=set()):
+        names = self.fixed - blacklist
+        self.σ.gen(names)
+        for k, v in self.Γ.items():
+            self.Γ[k] = self.Γ[k].gen(names)
+        self.F = self.F.gen(names)
+        self.hash = self.simple = None
+        return t.under(self).gen(names)
+
     def instantiate(self, t):
         t = t.under(self)
-        return t.fresh(self.fixed | t.evars()).eapp(self.fixed)
+        return t.fresh(self.fixed).flipped(self.fixed)
 
     def find(self, a):
         return self.σ.find(a)
