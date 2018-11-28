@@ -377,6 +377,15 @@ def analyze_fun_call(self, Γ, f, args):
             def k(Γ, t):
                 fresh_t = Γ.instantiate(t)
                 #print('instantiate({}) = {}'.format(t, fresh_t))
+                if type(fresh_t) is T.EVar:
+                    fresh_fun_t = T.Fun(
+                        T.EVar(next(U.fresh_ids)),
+                        T.EVar(next(U.fresh_ids)))
+                    #print(fresh_t, '~', fresh_fun_t)
+                    Γ.unify(t, fresh_t)
+                    Γ.unify(fresh_t, fresh_fun_t)
+                    fresh_t = fresh_fun_t
+                #print(Γ)
                 a = fresh_t.a
                 b = fresh_t.b
                 #print(arg_type.under(Γ), '~', a.under(Γ))
@@ -401,6 +410,31 @@ print_stmt = Rule(
         self.analyze([Γ], a, lambda new_Γ, inferred_type:
             [(new_Γ, None)]))
 
+def analyze_lambda_expr(self, Γ, args, e):
+    arg_ids = tuple(U.take(len(args), U.fresh_ids))
+    arg_types = [T.EVar(name) for name in arg_ids]
+    nested_Γ = Γ.copy()
+    for a, t in zip(map(U.ident2str, args), arg_types):
+        nested_Γ.annotate(a, t)
+    def k(nested_Γ, t):
+        #print(nested_Γ, 'nested_Γ')
+        #print('t =', t, '=>', t.under(nested_Γ))
+        #print('args =', ', '.join(map(str, arg_types)))
+        #print(T.Fun(
+        #    T.Tuple(a.under(nested_Γ).gen(arg_ids) for a in arg_types),
+        #    t.under(nested_Γ).gen(arg_ids)))
+        #print('Γ =', Γ)
+        for name in Γ.Γ:
+            Γ.unify(Γ.typeof(name), Γ.typeof(name).under(nested_Γ))
+        #print('new Γ =', Γ)
+        #print()
+        return [(Γ, T.Fun(
+            T.Tuple(a.under(nested_Γ).gen() for a in arg_types),
+            t.under(nested_Γ).gen()))]
+    return self.analyze([nested_Γ], e, k)
+
+lambda_expr = Rule('lambda __args: _e', analyze_lambda_expr, 'lambda_expr')
+
 # -------------------- basic rule set --------------------
 
 basic_rules = [
@@ -415,6 +449,7 @@ basic_rules = [
     cond, cond_expr,
     fun_def,
     fun_call,
+    lambda_expr,
     ret,
     print_expr,
     print_stmt]
@@ -431,14 +466,15 @@ if __name__ == '__main__':
             'np.ones': 'Fun((int(a),), array[a])'}),
         'import_numpy')
 
-    rules = basic_rules + [arr_zeros, add_row, smush, import_numpy]
-    c = Checker(rules, return_type=T.parse('array[3]'))
 
     def try_check(s):
+        rules = basic_rules + [arr_zeros, add_row, smush, import_numpy]
+        c = Checker(rules, return_type=T.parse('array[3]'))
         c.careful = False
         try:
-            c.check(A.parse(s))
+            state = c.check(A.parse(s))
             print('OK')
+            return state
         except (ValueError, ConfusionError, CheckError) as e:
             if type(e) in (CheckError, ConfusionError):
                 print(e.pretty(s))
@@ -536,3 +572,10 @@ b = None
     try_check('b: bool = None')
 
     try_check('b: bool = (True or False) and True')
+
+    print(try_check('''
+b = np.zeros(3)
+f = lambda a: add_row(smush(a, b))
+g = lambda f, g: lambda x: f(g(x))
+flip = lambda f: lambda a: lambda b: f(b)(a)
+'''))

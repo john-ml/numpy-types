@@ -215,3 +215,6 @@ if __name__ == '__main__':
     print(pretty_parse('a.b.c'))
     print(pretty_parse('import numpy as _np'))
     print(pretty_parse('print("hi")'))
+
+    print(pretty_parse('lambda a: None'))
+    print(pretty_parse('lambda a, b, c: None'))

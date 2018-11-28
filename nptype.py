@@ -23,6 +23,8 @@ class Type:
         pass
     def under(self, σ):
         pass
+    def replaced(self, replacements):
+        pass
     def to_z3(self):
         return True
     def fresh(self, blacklist=None):
@@ -32,6 +34,8 @@ class Type:
                 renaming[a] = a
         return self.renamed(renaming)
     def eapp(self, blacklist=None):
+        pass
+    def gen(self, blacklist=None):
         pass
     # partial ordering of types, for unification
     def __lshift__(a, b):
@@ -109,13 +113,18 @@ class UVar(Type):
     def renamed(self, renamings):
         return UVar(renamings[self.name]) if self.name in renamings else UVar(self.name)
     def under(self, σ):
-        return σ.find(self)
+        a = σ.find(self)
+        return a if a == self else a.under(σ)
+    def replaced(self, replacements):
+        return replacements[self] if self in replacements else self
     def to_z3(self, context=type):
         return z3.Int(self.name) if context == int else \
                z3.Bool(self.name) if context == bool else \
                z3.Int(self.name) # shrug
     def eapp(self, blacklist=[]):
         return EVar(self.name) if self.name not in blacklist else UVar(self.name)
+    def gen(self, blacklist=[]):
+        return UVar(self.name)
 
 # existential (ambiguous) type variable
 class EVar(Type):
@@ -138,13 +147,18 @@ class EVar(Type):
     def renamed(self, renamings):
         return EVar(renamings[self.name]) if self.name in renamings else EVar(self.name)
     def under(self, σ):
-        return σ.find(self)
+        a = σ.find(self)
+        return a if a == self else a.under(σ)
+    def replaced(self, replacements):
+        return replacements[self] if self in replacements else self
     def to_z3(self, context=type):
         return z3.Int(self.name) if context == int else \
                z3.Bool(self.name) if context == bool else \
                z3.Int(self.name) # shrug
     def eapp(self, blacklist=[]):
         return EVar(self.name)
+    def gen(self, blacklist=[]):
+        return UVar(self.name) if self.name not in blacklist else EVar(self.name)
 
 # -------------------- none --------------------
 
@@ -165,9 +179,13 @@ class TNone(Type):
         return self
     def under(self, σ):
         return self
+    def replaced(self, replacements):
+        return self
     def to_z3(self, context=type):
         return z3.Int(next(U.fresh_ids)) # TODO: replace with something reasonable
     def eapp(self, blacklist=[]):
+        return self
+    def gen(self, blacklist=[]):
         return self
 
 # -------------------- arithmetic expressions --------------------
@@ -193,9 +211,13 @@ class ALit(AExp):
         return self
     def under(self, σ):
         return self
+    def replaced(self, replacements):
+        return self
     def to_z3(self):
         return self.value
     def eapp(self, blacklist=[]):
+        return self
+    def gen(self, blacklist=[]):
         return self
 
 class AVar(AExp):
@@ -215,10 +237,14 @@ class AVar(AExp):
         return AVar(self.var.renamed(renamings))
     def under(self, σ):
         return σ.find(self)
+    def replaced(self, replacements):
+        return AVar(self.var.replaced(replacements))
     def to_z3(self):
         return self.var.to_z3(context=int)
     def eapp(self, blacklist=[]):
         return AVar(self.var.eapp(blacklist))
+    def gen(self, blacklist=[]):
+        return AVar(self.var.gen(blacklist))
 
 class Add(AExp):
     def __init__(self, a, b):
@@ -238,10 +264,14 @@ class Add(AExp):
         return Add(self.a.renamed(renamings), self.b.renamed(renamings))
     def under(self, σ):
         return Add(self.a.under(σ), self.b.under(σ))
+    def replaced(self, replacements):
+        return Add(self.a.replaced(replacements), self.b.replaced(replacements))
     def to_z3(self):
         return self.a.to_z3() + self.b.to_z3()
     def eapp(self, blacklist=[]):
         return Add(self.a.eapp(blacklist), self.b.eapp(blacklist))
+    def gen(self, blacklist=[]):
+        return Add(self.a.gen(blacklist), self.b.gen(blacklist))
 
 class Mul(AExp):
     def __init__(self, a, b):
@@ -261,10 +291,14 @@ class Mul(AExp):
         return Mul(self.a.renamed(renamings), self.b.renamed(renamings))
     def under(self, σ):
         return Mul(self.a.under(σ), self.b.under(σ))
+    def replaced(self, replacements):
+        return Mul(self.a.replaced(replacements), self.b.replaced(replacements))
     def to_z3(self):
         return self.a.to_z3() * self.b.to_z3()
     def eapp(self, blacklist=[]):
         return Mul(self.a.eapp(blacklist), self.b.eapp(blacklist))
+    def gen(self, blacklist=[]):
+        return Mul(self.a.gen(blacklist), self.b.gen(blacklist))
 
 # -------------------- boolean expressions --------------------
 
@@ -289,9 +323,13 @@ class BLit(BExp):
         return self
     def under(self, σ):
         return self
+    def replaced(self, replacements):
+        return self
     def to_z3(self):
         return self.value
     def eapp(self, blacklist=[]):
+        return self
+    def gen(self, blacklist=[]):
         return self
 
 class BVar(BExp):
@@ -311,10 +349,14 @@ class BVar(BExp):
         return BVar(self.var.renamed(renamings))
     def under(self, σ):
         return σ.find(self)
+    def replaced(self, replacements):
+        return BVar(self.var.replaced(replacements))
     def to_z3(self):
         return self.var.to_z3(context=bool)
     def eapp(self, blacklist=[]):
         return BVar(self.var.eapp(blacklist))
+    def gen(self, blacklist=[]):
+        return BVar(self.var.gen(blacklist))
 
 class Or(BExp):
     def __init__(self, a, b):
@@ -334,10 +376,14 @@ class Or(BExp):
         return Or(self.a.renamed(renamings), self.b.renamed(renamings))
     def under(self, σ):
         return Or(self.a.under(σ), self.b.under(σ))
+    def replaced(self, replacements):
+        return Or(self.a.replaced(replacements), self.b.replaced(replacements))
     def to_z3(self):
         return z3.Or(self.a.to_z3(), self.b.to_z3())
     def eapp(self, blacklist=[]):
         return Or(self.a.eapp(blacklist), self.b.eapp(blacklist))
+    def gen(self, blacklist=[]):
+        return Or(self.a.gen(blacklist), self.b.gen(blacklist))
 
 class And(BExp):
     def __init__(self, a, b):
@@ -357,10 +403,14 @@ class And(BExp):
         return And(self.a.renamed(renamings), self.b.renamed(renamings))
     def under(self, σ):
         return And(self.a.under(σ), self.b.under(σ))
+    def replaced(self, replacements):
+        return And(self.a.replaced(replacements), self.b.replaced(replacements))
     def to_z3(self):
         return z3.And(self.a.to_z3(), self.b.to_z3())
     def eapp(self, blacklist=[]):
         return And(self.a.eapp(blacklist), self.b.eapp(blacklist))
+    def gen(self, blacklist=[]):
+        return And(self.a.gen(blacklist), self.b.gen(blacklist))
 
 class Not(BExp):
     def __init__(self, a):
@@ -379,10 +429,14 @@ class Not(BExp):
         return Not(self.a.renamed(renamings))
     def under(self, σ):
         return Not(self.a.under(σ))
+    def replaced(self, replacements):
+        return Not(self.a.replaced(replacements))
     def to_z3(self):
         return z3.Not(self.a.to_z3())
     def eapp(self, blacklist=[]):
         return Not(self.a.eapp(blacklist))
+    def gen(self, blacklist=[]):
+        return Not(self.a.gen(blacklist))
 
 # -------------------- compound types --------------------
 
@@ -410,8 +464,12 @@ class Tuple(Type):
         return Tuple(a.renamed(renamings) for a in self.items)
     def under(self, σ):
         return Tuple(a.under(σ) for a in self.items)
+    def replaced(self, replacements):
+        return Tuple(a.replaced(replacements) for a in self.items)
     def eapp(self, blacklist=[]):
         return Tuple(a.eapp(blacklist) for a in self.items)
+    def gen(self, blacklist=[]):
+        return Tuple(a.gen(blacklist) for a in self.items)
 
 # numpy array
 class Array(Type):
@@ -435,8 +493,12 @@ class Array(Type):
         return Array(a.renamed(renamings) for a in self.shape)
     def under(self, σ):
         return Array(a.under(σ) for a in self.shape)
+    def replaced(self, replacements):
+        return Array(a.replaced(replacements) for a in self.shape)
     def eapp(self, blacklist=[]):
         return Array(a.eapp(blacklist) for a in self.shape)
+    def gen(self, blacklist=[]):
+        return Array(a.gen(blacklist) for a in self.shape)
 
 # function
 class Fun(Type):
@@ -457,8 +519,12 @@ class Fun(Type):
         return Fun(self.a.renamed(renamings), self.b.renamed(renamings))
     def under(self, σ):
         return Fun(self.a.under(σ), self.b.under(σ))
+    def replaced(self, replacements):
+        return Fun(self.a.replaced(replacements), self.b.replaced(replacements))
     def eapp(self, blacklist=[]):
         return Fun(self.a.eapp(blacklist), self.b.eapp(blacklist))
+    def gen(self, blacklist=[]):
+        return Fun(self.a.gen(blacklist), self.b.gen(blacklist))
 
 # -------------------- unification --------------------
 
@@ -479,7 +545,9 @@ class UnificationError(Exception):
 def unify(a, b, σ):
     a = a.under(σ)
     b = b.under(σ)
-    unwrap = lambda t: (t.items[0] if type(t) is Tuple and len(t.items) == 1 else t)
+    unwrap = lambda t: (
+        t if type(t) is not Tuple or len(t.items) != 1 else
+        unwrap(t.items[0]))
     a = unwrap(a)
     b = unwrap(b)
 

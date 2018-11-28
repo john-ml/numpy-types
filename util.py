@@ -43,8 +43,13 @@ def ident2str(a):
         return '{}.{}'.format(ident2str(a.value), a.attr)
     elif type(a) is A.Name:
         return a.id
+    elif type(a) is A.arg:
+        return a.arg
     else:
         raise ValueError('Unknown AST node (ident2str): ', type(a))
+
+def take(n, g):
+    return map(lambda a: a[0], zip(g, range(n)))
 
 def to_quantified_z3(a):
     import z3
