@@ -73,13 +73,11 @@ class Substitution:
         self.hash = None
         return self
 
-    def equal_pairs(self):
-        return self.equalities
-
     def extract_sets(self, predicate):
         from functools import reduce
         return set(reduce(U.union, 
-            (predicate(l) | predicate(r) for l, r in self.equal_pairs()),
+            (predicate(l) | predicate(r)
+                for l, r in self.equalities | set(self.m.items())),
             set()))
 
     def evars(self):
@@ -88,13 +86,25 @@ class Substitution:
     def uvars(self):
         return self.extract_sets(U.uvars)
 
+    def free_vars(self):
+        return {a
+            for l, r in self.equalities
+            for a in l.vars() | r.vars()}
+
     # convert equality constraints to z3 formula
     # assumes items implement .to_z3, .evars, .uvars, .under
     # TODO: move this out of Substitution?
     def to_z3(self):
         import z3
-        return z3.And(list(set(l.under(self).to_z3() == r.under(self).to_z3() \
-            for l, r in self.equal_pairs())))
+        assumptions = {l.to_z3() == r.to_z3()
+            for a in self.free_vars()
+            for l, r in [(a, self.find(a))]
+            if l != r}
+        equalities = {l.to_z3() == r.to_z3()
+            for left, right in self.equalities
+            for l, r in [(left.under(self), right.under(self))]
+            if l != r}
+        return z3.And(list(equalities | assumptions))
 
 if __name__ == '__main__':
     σ = Substitution(lambda a, b: a < b)

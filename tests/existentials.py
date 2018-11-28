@@ -5,6 +5,4 @@ import numpy as np
 def magic(x: array[a]) -> array[_b]:
     return np.zeros(3) # callee makes choice of b
 
-a = magic(np.zeros(1))
-b = magic(np.zeros(2))
-c = a + b
+a = magic(np.zeros(1)) + magic(np.zeros(2))

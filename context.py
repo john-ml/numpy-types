@@ -122,6 +122,9 @@ class Context:
     def uvars(self):
         return self.σ.uvars() | self.F.uvars()
 
+    def free_vars(self):
+        return self.F.vars() | self.σ.free_vars()
+
     def to_z3(self):
         import z3
         return z3.Implies(self.F.to_z3(), self.σ.to_z3())
@@ -149,6 +152,9 @@ class State:
 
     def uvars(self):
         return U.mapreduce(U.union, U.uvars, self.contexts, set())
+
+    def free_vars(self):
+        return U.mapreduce(U.union, U.free_vars, self.contexts, set())
 
     def to_z3(self):
         import z3

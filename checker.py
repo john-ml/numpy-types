@@ -88,7 +88,7 @@ class CheckError(ASTError):
 
         coords = {U.coords(p[-2].ast) for p in paths}
         footer = summary if len(paths) > 10 else '\n'.join({str(p[-1]) for p in paths})
-        return '{}\n{}'.format(
+        return '{}{}'.format(
             '\n'.join(
                 U.code_pointers(row, [c for r, c in coords if r == row], s)
                 for row in {r for r, _ in coords}),
@@ -379,19 +379,19 @@ def analyze_fun_call(self, Γ, f, args):
         if l == []:
             arg_type = T.Tuple(arg_types)
             def k(Γ, t):
-                print('t =', t)
+                #print('t =', t)
                 a = next(U.fresh_ids)
                 b = next(U.fresh_ids)
                 Γ.fix({a, b})
                 fn = T.Fun(T.EVar(a), T.EVar(b))
                 Γ.unify(t, fn)
-                print(t, '~', fn)
-                print(arg_type.under(Γ), '~', fn.a.under(Γ))
+                #print(t, '~', fn)
+                #print(arg_type.under(Γ), '~', fn.a.under(Γ))
                 Γ.unify(arg_type, fn.a)
-                print(
-                    '=>', fn.b, '=', fn.b.under(Γ),
-                    'after applying', P.pretty(P.explode(f)))
-                print('Γ =', Γ)
+                #print(
+                #    '=>', fn.b, '=', fn.b.under(Γ),
+                #    'after applying', P.pretty(P.explode(f)))
+                #print('Γ =', Γ)
                 return [(Γ, fn.b)]
             return self.analyze([Γ], f, k)
         h, t = l[0], l[1:]

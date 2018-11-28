@@ -4,6 +4,7 @@ typedict = lambda d: ', '.join('{} : {}'.format(k, v) for k, v in d.items())
 union = lambda a, b: a | b
 evars = lambda a: a.evars()
 uvars = lambda a: a.uvars()
+free_vars = lambda a: a.free_vars()
 names_of = lambda a: a.names() if hasattr(a, 'names') else set()
 to_z3 = lambda a: a.to_z3()
 let = lambda a: a()
@@ -53,8 +54,8 @@ def take(n, g):
 
 def to_quantified_z3(a):
     import z3
-    t = [b.to_z3() for b in a.uvars()]
-    e = [b.to_z3() for b in a.evars()]
+    t = [b.to_z3() for b in a.uvars() & a.free_vars()]
+    e = [b.to_z3() for b in a.evars() & a.free_vars()]
     ex = z3.Exists(e, a.to_z3()) if len(e) > 0 else a.to_z3()
     return z3.ForAll(t, ex) if len(t) > 0 else ex
 
