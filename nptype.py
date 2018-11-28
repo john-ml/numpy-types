@@ -11,23 +11,27 @@ class Type:
         pass
     def __hash__(self):
         pass
-    def tvars(self):
+    def uvars(self):
         pass
     def evars(self):
         pass
     def vars(self):
-        return self.tvars() | self.evars()
+        return self.uvars() | self.evars()
     def names(self):
-        return {v.name if type(v) in (TVar, EVar) else v.var.name for v in self.vars()}
+        return {v.name if type(v) in (UVar, EVar) else v.var.name for v in self.vars()}
     def renamed(self, renamings):
         pass
     def under(self, σ):
         pass
     def to_z3(self):
         return True
-    def fresh(self):
-        return self.renamed(dict(zip(self.names(), U.fresh_ids)))
-    def flipped(self):
+    def fresh(self, blacklist=None):
+        renaming = dict(zip(self.names(), U.fresh_ids))
+        if blacklist is not None:
+            for a in blacklist:
+                renaming[a] = a
+        return self.renamed(renaming)
+    def eapp(self, blacklist=None):
         pass
     # partial ordering of types, for unification
     def __lshift__(a, b):
@@ -73,7 +77,7 @@ class Type:
         if type(a) is bool:
             return BLit(a)
         if type(a) is str:
-            var = EVar(a) if a.startswith('?') else TVar(a)
+            var = EVar(a) if a.startswith('?') else UVar(a)
             if context is type:
                 return var
             if context is int:
@@ -85,7 +89,7 @@ class Type:
 # -------------------- variables --------------------
 
 # universal (rigid) type variable
-class TVar(Type):
+class UVar(Type):
     def __init__(self, name):
         self.name = name
     def __str__(self):
@@ -97,21 +101,21 @@ class TVar(Type):
     def __eq__(self, other):
         return type(self) is type(other) and self.name == other.name
     def __hash__(self):
-        return hash(('TVar', self.name))
-    def tvars(self):
+        return hash(('UVar', self.name))
+    def uvars(self):
         return {self}
     def evars(self):
         return set()
     def renamed(self, renamings):
-        return TVar(renamings[self.name]) if self.name in renamings else TVar(self.name)
+        return UVar(renamings[self.name]) if self.name in renamings else UVar(self.name)
     def under(self, σ):
         return σ.find(self)
     def to_z3(self, context=type):
         return z3.Int(self.name) if context == int else \
                z3.Bool(self.name) if context == bool else \
                z3.Int(self.name) # shrug
-    def flipped(self):
-        return EVar(self.name)
+    def eapp(self, blacklist=[]):
+        return EVar(self.name) if self.name not in blacklist else UVar(self.name)
 
 # existential (ambiguous) type variable
 class EVar(Type):
@@ -127,7 +131,7 @@ class EVar(Type):
         return type(self) is type(other) and self.name == other.name
     def __hash__(self):
         return hash(('EVar', self.name))
-    def tvars(self):
+    def uvars(self):
         return set()
     def evars(self):
         return {self}
@@ -139,8 +143,8 @@ class EVar(Type):
         return z3.Int(self.name) if context == int else \
                z3.Bool(self.name) if context == bool else \
                z3.Int(self.name) # shrug
-    def flipped(self):
-        return TVar(self.name)
+    def eapp(self, blacklist=[]):
+        return EVar(self.name)
 
 # -------------------- none --------------------
 
@@ -153,7 +157,7 @@ class TNone(Type):
         return type(other) is TNone
     def __hash__(self):
         return hash('TNone')
-    def tvars(self):
+    def uvars(self):
         return set()
     def evars(self):
         return set()
@@ -163,7 +167,7 @@ class TNone(Type):
         return self
     def to_z3(self, context=type):
         return z3.Int(next(U.fresh_ids)) # TODO: replace with something reasonable
-    def flipped(self):
+    def eapp(self, blacklist=[]):
         return self
 
 # -------------------- arithmetic expressions --------------------
@@ -181,7 +185,7 @@ class ALit(AExp):
         return type(self) is type(other) and self.value == other.value
     def __hash__(self):
         return hash(('ALit', self.value))
-    def tvars(self):
+    def uvars(self):
         return set()
     def evars(self):
         return set()
@@ -191,7 +195,7 @@ class ALit(AExp):
         return self
     def to_z3(self):
         return self.value
-    def flipped(self):
+    def eapp(self, blacklist=[]):
         return self
 
 class AVar(AExp):
@@ -203,8 +207,8 @@ class AVar(AExp):
         return type(self) is type(other) and self.var == other.var
     def __hash__(self):
         return hash(('AVar', self.var))
-    def tvars(self):
-        return {self} if type(self.var) is TVar else set()
+    def uvars(self):
+        return {self} if type(self.var) is UVar else set()
     def evars(self):
         return {self} if type(self.var) is EVar else set()
     def renamed(self, renamings):
@@ -213,8 +217,8 @@ class AVar(AExp):
         return σ.find(self)
     def to_z3(self):
         return self.var.to_z3(context=int)
-    def flipped(self):
-        return AVar(self.var.flipped())
+    def eapp(self, blacklist=[]):
+        return AVar(self.var.eapp(blacklist))
 
 class Add(AExp):
     def __init__(self, a, b):
@@ -226,8 +230,8 @@ class Add(AExp):
         return type(self) is type(other) and self.a == other.a and self.b == other.b
     def __hash__(self):
         return hash(('Add', self.a, self.b))
-    def tvars(self):
-        return self.a.tvars() | self.b.tvars()
+    def uvars(self):
+        return self.a.uvars() | self.b.uvars()
     def evars(self):
         return self.a.evars() | self.b.evars()
     def renamed(self, renamings):
@@ -236,8 +240,8 @@ class Add(AExp):
         return Add(self.a.under(σ), self.b.under(σ))
     def to_z3(self):
         return self.a.to_z3() + self.b.to_z3()
-    def flipped(self):
-        return Add(self.a.flipped(), self.b.flipped())
+    def eapp(self, blacklist=[]):
+        return Add(self.a.eapp(blacklist), self.b.eapp(blacklist))
 
 class Mul(AExp):
     def __init__(self, a, b):
@@ -249,8 +253,8 @@ class Mul(AExp):
         return type(self) is type(other) and self.a == other.a and self.b == other.b
     def __hash__(self):
         return hash(('Mul', self.a, self.b))
-    def tvars(self):
-        return self.a.tvars() | self.b.tvars()
+    def uvars(self):
+        return self.a.uvars() | self.b.uvars()
     def evars(self):
         return self.a.evars() | self.b.evars()
     def renamed(self, renamings):
@@ -259,8 +263,8 @@ class Mul(AExp):
         return Mul(self.a.under(σ), self.b.under(σ))
     def to_z3(self):
         return self.a.to_z3() * self.b.to_z3()
-    def flipped(self):
-        return Mul(self.a.flipped(), self.b.flipped())
+    def eapp(self, blacklist=[]):
+        return Mul(self.a.eapp(blacklist), self.b.eapp(blacklist))
 
 # -------------------- boolean expressions --------------------
 
@@ -277,7 +281,7 @@ class BLit(BExp):
         return type(self) is type(other) and self.value == other.value
     def __hash__(self):
         return hash(('BLit', self.value))
-    def tvars(self):
+    def uvars(self):
         return set()
     def evars(self):
         return set()
@@ -287,7 +291,7 @@ class BLit(BExp):
         return self
     def to_z3(self):
         return self.value
-    def flipped(self):
+    def eapp(self, blacklist=[]):
         return self
 
 class BVar(BExp):
@@ -299,8 +303,8 @@ class BVar(BExp):
         return type(self) is type(other) and self.var == other.var
     def __hash__(self):
         return hash(('BVar', self.var))
-    def tvars(self):
-        return {self} if type(self.var) is TVar else set()
+    def uvars(self):
+        return {self} if type(self.var) is UVar else set()
     def evars(self):
         return {self} if type(self.var) is EVar else set()
     def renamed(self, renamings):
@@ -309,8 +313,8 @@ class BVar(BExp):
         return σ.find(self)
     def to_z3(self):
         return self.var.to_z3(context=bool)
-    def flipped(self):
-        return BVar(self.var.flipped())
+    def eapp(self, blacklist=[]):
+        return BVar(self.var.eapp(blacklist))
 
 class Or(BExp):
     def __init__(self, a, b):
@@ -322,8 +326,8 @@ class Or(BExp):
         return type(self) is type(other) and self.a == other.a and self.b == other.b
     def __hash__(self):
         return hash(('Or', self.a, self.b))
-    def tvars(self):
-        return self.a.tvars() | self.b.tvars()
+    def uvars(self):
+        return self.a.uvars() | self.b.uvars()
     def evars(self):
         return self.a.evars() | self.b.evars()
     def renamed(self, renamings):
@@ -332,8 +336,8 @@ class Or(BExp):
         return Or(self.a.under(σ), self.b.under(σ))
     def to_z3(self):
         return z3.Or(self.a.to_z3(), self.b.to_z3())
-    def flipped(self):
-        return Or(self.a.flipped(), self.b.flipped())
+    def eapp(self, blacklist=[]):
+        return Or(self.a.eapp(blacklist), self.b.eapp(blacklist))
 
 class And(BExp):
     def __init__(self, a, b):
@@ -345,8 +349,8 @@ class And(BExp):
         return type(self) is type(other) and self.a == other.a and self.b == other.b
     def __hash__(self):
         return hash(('And', self.a, self.b))
-    def tvars(self):
-        return self.a.tvars() | self.b.tvars()
+    def uvars(self):
+        return self.a.uvars() | self.b.uvars()
     def evars(self):
         return self.a.evars() | self.b.evars()
     def renamed(self, renamings):
@@ -355,8 +359,8 @@ class And(BExp):
         return And(self.a.under(σ), self.b.under(σ))
     def to_z3(self):
         return z3.And(self.a.to_z3(), self.b.to_z3())
-    def flipped(self):
-        return And(self.a.flipped(), self.b.flipped())
+    def eapp(self, blacklist=[]):
+        return And(self.a.eapp(blacklist), self.b.eapp(blacklist))
 
 class Not(BExp):
     def __init__(self, a):
@@ -367,8 +371,8 @@ class Not(BExp):
         return type(self) is type(other) and self.a == other.a
     def __hash__(self):
         return hash(('Not', self.a))
-    def tvars(self):
-        return self.a.tvars()
+    def uvars(self):
+        return self.a.uvars()
     def evars(self):
         return self.a.evars()
     def renamed(self, renamings):
@@ -377,8 +381,8 @@ class Not(BExp):
         return Not(self.a.under(σ))
     def to_z3(self):
         return z3.Not(self.a.to_z3())
-    def flipped(self):
-        return Not(self.a.flipped())
+    def eapp(self, blacklist=[]):
+        return Not(self.a.eapp(blacklist))
 
 # -------------------- compound types --------------------
 
@@ -398,16 +402,16 @@ class Tuple(Type):
         return (a for a in self.items)
     def __hash__(self):
         return hash(('Tuple', tuple(self.items)))
-    def tvars(self):
-        return U.mapreduce(U.union, U.tvars, self.items, set())
+    def uvars(self):
+        return U.mapreduce(U.union, U.uvars, self.items, set())
     def evars(self):
         return U.mapreduce(U.union, U.evars, self.items, set())
     def renamed(self, renamings):
         return Tuple(a.renamed(renamings) for a in self.items)
     def under(self, σ):
         return Tuple(a.under(σ) for a in self.items)
-    def flipped(self):
-        return Tuple(a.flipped() for a in self.items)
+    def eapp(self, blacklist=[]):
+        return Tuple(a.eapp(blacklist) for a in self.items)
 
 # numpy array
 class Array(Type):
@@ -423,16 +427,16 @@ class Array(Type):
         return (a for a in self.shape)
     def __hash__(self):
         return hash(('Array', tuple(self.shape)))
-    def tvars(self):
-        return U.mapreduce(U.union, U.tvars, self.shape, set())
+    def uvars(self):
+        return U.mapreduce(U.union, U.uvars, self.shape, set())
     def evars(self):
         return U.mapreduce(U.union, U.evars, self.shape, set())
     def renamed(self, renamings):
         return Array(a.renamed(renamings) for a in self.shape)
     def under(self, σ):
         return Array(a.under(σ) for a in self.shape)
-    def flipped(self):
-        return Array(a.flipped() for a in self.shape)
+    def eapp(self, blacklist=[]):
+        return Array(a.eapp(blacklist) for a in self.shape)
 
 # function
 class Fun(Type):
@@ -445,16 +449,16 @@ class Fun(Type):
         return type(self) is type(other) and self.a == other.a and self.b == other.b
     def __hash__(self):
         return hash(('Fun', self.a, self.b))
-    def tvars(self):
-        return self.a.tvars() | self.b.tvars()
+    def uvars(self):
+        return self.a.uvars() | self.b.uvars()
     def evars(self):
         return self.a.evars() | self.b.evars()
     def renamed(self, renamings):
         return Fun(self.a.renamed(renamings), self.b.renamed(renamings))
     def under(self, σ):
         return Fun(self.a.under(σ), self.b.under(σ))
-    def flipped(self):
-        return Fun(self.a.flipped(), self.b.flipped())
+    def eapp(self, blacklist=[]):
+        return Fun(self.a.eapp(blacklist), self.b.eapp(blacklist))
 
 # -------------------- unification --------------------
 
@@ -475,11 +479,14 @@ class UnificationError(Exception):
 def unify(a, b, σ):
     a = a.under(σ)
     b = b.under(σ)
+    unwrap = lambda t: (t.items[0] if type(t) is Tuple and len(t.items) == 1 else t)
+    a = unwrap(a)
+    b = unwrap(b)
 
     # existential variables
     if EVar in (type(a), type(b)):
         e, t = (a, b) if type(a) is EVar else (b, a)
-        if e in t.evars():
+        if e in t.evars() and e != t:
             raise UnificationError(a, b, 'occurs check failed')
         return σ.union(a, b)
 
@@ -488,7 +495,9 @@ def unify(a, b, σ):
         if EVar in (type(a.var), type(b.var)):
             return σ.union(a, b)
         else:
-            assert type(a.var) is type(b.var) is TVar
+            assert type(a.var) is type(b.var) is UVar
+            if a == b:
+                return σ
             raise UnificationError(a, b, 'two rigid type variables')
 
     # literals
@@ -505,7 +514,7 @@ def unify(a, b, σ):
     elif type(a) is not type(b):
         raise UnificationError(a, b, 'incompatible types')
 
-    elif type(a) is TVar and a != b:
+    elif type(a) is UVar and a != b:
         raise UnificationError(a, b, 'two rigid type variables')
 
     elif type(a) is Fun:
@@ -522,13 +531,13 @@ def unify(a, b, σ):
 
 # -------------------- parsing --------------------
 
-name2var = lambda name: (EVar(name.id[1:]) if name.id[0] == '_' else TVar(name.id))
+name2var = lambda name: (EVar(name.id[1:]) if name.id[0] == '_' else UVar(name.id))
 to_int = (lambda t:
-    AVar(t) if type(t) in (TVar, EVar) else
+    AVar(t) if type(t) in (UVar, EVar) else
     t if type(t) in (ALit, AVar) else
     type(t)(to_int(t.a), to_int(t.b)))
 to_bool = (lambda t:
-    BVar(t) if type(t) in (TVar, EVar) else
+    BVar(t) if type(t) in (UVar, EVar) else
     t if type(t) in (BLit, BVar) else
     Not(to_bool(t.a)) if type(t) is Not else
     type(t)(to_bool(t.a), to_bool(t.b)))
@@ -540,8 +549,8 @@ def from_ast(ast):
         ('_a + _b', lambda a, b: Add(to_int(go(a)), to_int(go(b)))),
         ('_a * _b', lambda a, b: Mul(to_int(go(a)), to_int(go(b)))),
 
-        ('_a : int', lambda a: (a, AVar(TVar(a)))),
-        ('_a : bool', lambda a: (a, BVar(TVar(a)))),
+        ('_a : int', lambda a: (a, AVar(UVar(a)))),
+        ('_a : bool', lambda a: (a, BVar(UVar(a)))),
         ('_a : _t', lambda a, t: (a, go(t))),
 
         ('int', lambda: AVar(EVar(next(U.fresh_ids)))),
@@ -567,7 +576,7 @@ def from_ast(ast):
     return go(ast)
 
 def parse(s):
-    name2var = lambda name: (EVar(name.id[1:]) if name.id[0] == '_' else TVar(name.id))
+    name2var = lambda name: (EVar(name.id[1:]) if name.id[0] == '_' else UVar(name.id))
     rules = [
         ('a__Num', lambda a: ALit(a.n)),
 
@@ -604,21 +613,21 @@ def parse(s):
 # --------------------------------------------------------------------------------
 
 if __name__ == '__main__':
-    print(Array(['b', TVar('a') + 1]))
+    print(Array(['b', UVar('a') + 1]))
     print(isinstance(EVar('b'), AExp), isinstance(EVar('b'), AExp))
 
-    t = Array([1 + TVar('g'), EVar('c') * TVar('a')])
-    print([str(a) for a in t.tvars()])
+    t = Array([1 + UVar('g'), EVar('c') * UVar('a')])
+    print([str(a) for a in t.uvars()])
     print([str(a) for a in t.evars()])
     print([str(a) for a in t.vars()])
 
-    t = TVar('g') * 3 + 4 + TVar('a') * EVar('b')
+    t = UVar('g') * 3 + 4 + UVar('a') * EVar('b')
     print(t.to_z3())
     print([str(a) for a in t.evars()])
-    print([str(a) for a in t.tvars()])
+    print([str(a) for a in t.uvars()])
 
     print(t.fresh())
-    print(t.fresh().flipped())
+    print(t.fresh().eapp())
 
     def try_unify(a, b, σ):
         try:
@@ -630,19 +639,19 @@ if __name__ == '__main__':
             print()
 
     σ = S.Substitution(lambda a, b: a << b)
-    try_unify(TVar('a'), TVar('b'), σ)
-    try_unify(TVar('a'), TVar('a'), σ)
-    try_unify(Array([AVar(TVar('a'))]), Array([AVar(EVar('b'))]), σ)
-    try_unify(AVar(TVar('c')), AVar(EVar('d')), σ)
-    try_unify(Array([AVar(TVar('e'))]), Array([AVar(TVar('f'))]), σ)
-    try_unify(Array([1 + AVar(TVar('g'))]), Array([AVar(TVar('g')) + 1]), σ)
+    try_unify(UVar('a'), UVar('b'), σ)
+    try_unify(UVar('a'), UVar('a'), σ)
+    try_unify(Array([AVar(UVar('a'))]), Array([AVar(EVar('b'))]), σ)
+    try_unify(AVar(UVar('c')), AVar(EVar('d')), σ)
+    try_unify(Array([AVar(UVar('e'))]), Array([AVar(UVar('f'))]), σ)
+    try_unify(Array([1 + AVar(UVar('g'))]), Array([AVar(UVar('g')) + 1]), σ)
     try_unify(
-        BVar(TVar('h')) & BVar(TVar('i')),
-        BVar(TVar('i')) & BVar(TVar('h')), σ)
+        BVar(UVar('h')) & BVar(UVar('i')),
+        BVar(UVar('i')) & BVar(UVar('h')), σ)
     
     F = σ.to_z3()
     print(F)
-    print(σ.evars(), σ.tvars())
+    print(σ.evars(), σ.uvars())
     print(z3.simplify(F))
     s = z3.Solver()
     F = U.to_quantified_z3(σ)

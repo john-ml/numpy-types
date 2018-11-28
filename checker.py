@@ -133,9 +133,9 @@ class Checker:
     # Checker * [Context] * AST * (Context * a -> [Context * b]) -> [Context * b]
     # fail with ConfusionError if no rules match
     # fail with CheckError if all rules that matched threw
-    def analyze(self, contexts, ast, f = no_op):
+    def analyze(self, Γs, ast, f = no_op):
         k_ast = P.simplify(ast)
-        k = (ast, tuple(contexts))
+        k = (ast, tuple(Γs))
         possible_errors = (ValueError, CheckError, ConfusionError, T.UnificationError)
 
         # compute results for each applicable pattern
@@ -158,11 +158,11 @@ class Checker:
             self.ast_memo[k_ast] = (ast_hits + 1, matches)
 
             options = []
-            for context in contexts:
+            for Γ in Γs:
                 errors = []
                 for rule, match in matches:
                     try:
-                        options.append((rule, rule.action(self, context.copy(), **match)))
+                        options.append((rule, rule.action(self, Γ.copy(), **match)))
                     except possible_errors as e:
                         errors.append((rule, e))
                 if options == []:
@@ -194,10 +194,10 @@ class Checker:
     def dump_memo(self, s):
         for ast, (hits, rules) in sorted(self.ast_memo.items(), key=lambda a: a[1][0]):
             print('{}\n{} hits ({} rules)'.format(ast, hits, len(rules)))
-        for (ast, contexts), (hits, _) in sorted(self.memo.items(), key=lambda a: a[1][0]):
+        for (ast, Γs), (hits, _) in sorted(self.memo.items(), key=lambda a: a[1][0]):
             print('{}\n{} hits ({})'.format(U.highlight(ast, s), hits, type(ast).__name__))
             print('Contexts:')
-            for c in contexts:
+            for c in Γs:
                 print(str(c.reduced()))
 
 # -------------------- rule/checker combinators --------------------
@@ -208,24 +208,24 @@ def expression(s, assumptions, return_type, name=None):
     to_type = lambda a: (T.parse(a) if type(a) is str else a)
     assumptions = dict((k, to_type(v)) for k, v in assumptions.items())
     return_type = to_type(return_type)
-    def f(self, context, **kwargs):
+    def f(self, Γ, **kwargs):
         names = {v for _, t in assumptions.items() for v in t.names()} | return_type.names()
-        def loop(context, pairs, analyzed):
+        def loop(Γ, pairs, analyzed):
             if pairs == []:
                 # TODO better way of naming
                 renaming = dict(zip(names, map(lambda a: 'tmp' + a, U.fresh_ids)))
-                instantiate = lambda t: t.renamed(renaming).flipped()
+                instantiate = lambda t: t.renamed(renaming).eapp()
                 for name, inferred_type in analyzed:
-                    context.unify(inferred_type, instantiate(assumptions[name]))
-                return [(context, instantiate(return_type))]
+                    Γ.unify(inferred_type, instantiate(assumptions[name]))
+                return [(Γ, instantiate(return_type))]
             (name, ast), tail = pairs[0], pairs[1:]
-            return self.analyze([context], ast, lambda new_context, inferred_type:
-                loop(new_context, tail, analyzed + [(name, inferred_type)]))
-        return loop(context, list(kwargs.items()), [])
+            return self.analyze([Γ], ast, lambda new_Γ, inferred_type:
+                loop(new_Γ, tail, analyzed + [(name, inferred_type)]))
+        return loop(Γ, list(kwargs.items()), [])
     return Rule(s, f, name)
 
 def literal(s, t, name=None):
-    return Rule(s, lambda _, context: [(context, t)], name)
+    return Rule(s, lambda _, Γ: [(Γ, t)], name)
 
 # binary infix operator op and corresponding variable type v and type constructor f
 def binary_operator(op, v, f, name=None):
@@ -236,8 +236,8 @@ def binary_operator(op, v, f, name=None):
         name)
 
 # extend an environment
-def extend(self, context, bindings, k=no_op):
-    c = context.copy()
+def extend(self, Γ, bindings, k=no_op):
+    c = Γ.copy()
     for a, t in bindings.items():
         t = T.parse(t)
         c.annotate(a, t)
@@ -245,20 +245,20 @@ def extend(self, context, bindings, k=no_op):
 
 # -------------------- basic type-checking rules --------------------
 
-def analyze_body(self, context, body, k=no_op):
+def analyze_body(self, Γ, body, k=no_op):
     if body == []:
-        return k(context, None)
+        return k(Γ, None)
     h, t = body[0], body[1:]
-    return self.analyze([context], h, lambda new_context, _:
-        analyze_body(self, (U.verify(new_context) if self.careful else new_context), t, k))
+    return self.analyze([Γ], h, lambda new_Γ, _:
+        analyze_body(self, (U.verify(new_Γ) if self.careful else new_Γ), t, k))
 
 module = Rule(P.raw_pattern('__body'), analyze_body, 'module')
 
-def analyze_cond(self, context, t, top, bot, k=no_op):
-    top_context = context.copy().assume(t)
-    bot_context = context.copy().assume(T.Not(t))
-    top_results = analyze_body(self, top_context, top)
-    bot_results = analyze_body(self, bot_context, bot)
+def analyze_cond(self, Γ, t, top, bot, k=no_op):
+    top_Γ = Γ.copy().assume(t)
+    bot_Γ = Γ.copy().assume(T.Not(t))
+    top_results = analyze_body(self, top_Γ, top)
+    bot_results = analyze_body(self, bot_Γ, bot)
     return [b
         for s, a in top_results + bot_results
         for b in k(s, a)]
@@ -269,64 +269,69 @@ if _p:
 else:
     __bot
 ''',
-lambda self, context, p, top, bot:
-    self.analyze([context], p, lambda new_context, t:
-        analyze_cond(self, new_context, t, top, bot)),
+lambda self, Γ, p, top, bot:
+    self.analyze([Γ], p, lambda new_Γ, t:
+        analyze_cond(self, new_Γ, t, top, bot)),
 'cond')
 
-skip = Rule('pass', lambda self, context: [(context, None)], 'skip')
+skip = Rule('pass', lambda self, Γ: [(Γ, None)], 'skip')
 
-def analyze_cond_expr(self, context, t, l, r, k=no_op):
-    top_context = context.copy().assume(t)
-    bot_context = context.copy().assume(T.Not(t))
-    top_results = self.analyze([top_context], l)
-    bot_results = self.analyze([bot_context], r)
+def analyze_cond_expr(self, Γ, t, l, r, k=no_op):
+    top_Γ = Γ.copy().assume(t)
+    bot_Γ = Γ.copy().assume(T.Not(t))
+    top_results = self.analyze([top_Γ], l)
+    bot_results = self.analyze([bot_Γ], r)
     return [b
         for s, a in top_results + bot_results
         for b in k(s, a)]
 
 cond_expr = Rule(
     '_l if _p else _r',
-    lambda self, context, l, p, r:
-        self.analyze([context], p, lambda new_context, t:
-            analyze_cond_expr(self, new_context, t, l, r)),
+    lambda self, Γ, l, p, r:
+        self.analyze([Γ], p, lambda new_Γ, t:
+            analyze_cond_expr(self, new_Γ, t, l, r)),
     'cond_expr')
 
-def analyze_assign(self, context, lhs, rhs):
+def analyze_assign(self, Γ, lhs, rhs):
     assert type(lhs) is A.Name
-    def k(new_context, new_t):
-        if U.ident2str(lhs) in new_context:
-            old_t = new_context.typeof(U.ident2str(lhs))
+    def k(new_Γ, new_t):
+        if U.ident2str(lhs) in new_Γ:
+            old_t = new_Γ.typeof(U.ident2str(lhs))
             if not (isinstance(old_t, T.AExp) and isinstance(new_t, T.AExp) or
                     isinstance(old_t, T.BExp) and isinstance(new_t, T.BExp)):
-                new_context.unify(old_t, new_t)
-        new_context.annotate(U.ident2str(lhs), new_t)
-        return [(new_context, None)]
-    return self.analyze([context], rhs, k)
+                new_Γ.unify(old_t, new_t)
+        new_Γ.annotate(U.ident2str(lhs), new_t)
+        return [(new_Γ, None)]
+    return self.analyze([Γ], rhs, k)
 
 assign = Rule('_lhs = _rhs', analyze_assign, 'assign')
 
-def analyze_ident(self, context, a):
-    return [(context, context.typeof(U.ident2str(a)))]
+def analyze_ident(self, Γ, a):
+    return [(Γ, Γ.typeof(U.ident2str(a)))]
 
 ident = Rule('a__Name', analyze_ident, 'ident')
 attr_ident = Rule('a__Attribute', analyze_ident, 'attr_ident')
 
-def analyze_fun_def(self, context, f, args, return_type, body):
+def analyze_fun_def(self, Γ, f, args, return_type, body):
     arg_types = []
-    nested_context = context.copy()
+    nested_Γ = Γ.copy()
     for arg in args:
         a, t = T.from_ast(arg)
-        nested_context.annotate(a, t)
+        nested_Γ.annotate(a, t, fixed=True)
         arg_types.append(t)
     r = T.from_ast(return_type)
-    fun_type = T.Fun(T.Tuple(arg_types), r)
-    nested_context.annotate(f, fun_type)
+    arg_types = T.Tuple(arg_types) if len(arg_types) != 1 else arg_types[0]
+    fun_type = T.Fun(arg_types, r)
+    nested_Γ.annotate(f, fun_type, fixed=True)
+
+    polymorphic_fun_type = fun_type.fresh(Γ.fixed)
+    #print('fun_type =', fun_type)
+    #print('polymorphic_fun_type =', polymorphic_fun_type)
     return analyze_body(
         self.returning(r),
-        nested_context, body,
-        lambda new_context, _: (lambda _:
-            [(context.annotate(f, fun_type), None)])(U.verify(new_context)))
+        nested_Γ, body,
+        lambda new_Γ, _: (lambda _:
+            [(Γ.annotate(f, polymorphic_fun_type), None)])(U.verify(new_Γ)))
 
 fun_def = Rule('''
 def _f(__args) -> _return_type:
@@ -340,35 +345,44 @@ bool_or = binary_operator('or', T.BVar, T.Or, 'bool_or')
 bool_and = binary_operator('and', T.BVar, T.And, 'bool_and')
 bool_not = expression('not _a', {'a': 'bool(a)'}, 'not bool(a)', 'bool_not')
 
-lit_num = Rule('num__Num', lambda _, context, num:
-    [(context, T.ALit(int(num.n)))], 'lit_num')
+lit_num = Rule('num__Num', lambda _, Γ, num:
+    [(Γ, T.ALit(int(num.n)))], 'lit_num')
 int_add = binary_operator('+', T.AVar, T.Add, 'int_add')
 int_mul = binary_operator('*', T.AVar, T.Mul, 'int_mul')
 
-ret = Rule('return _a', lambda self, context, a:
-    self.analyze([context], a, lambda new_context, t:
-        [(new_context.unify(self.return_type, t), None)]), 'return')
+ret = Rule('return _a', lambda self, Γ, a:
+    self.analyze([Γ], a, lambda new_Γ, t:
+        [(new_Γ.unify(self.return_type, t), None)]), 'return')
 
-def analyze_fun_call(self, context, f, args):
-    def loop(context, l, arg_types):
+def analyze_fun_call(self, Γ, f, args):
+    def loop(Γ, l, arg_types):
         if l == []:
             arg_type = T.Tuple(arg_types)
-            fn_type = context.typeof(U.ident2str(f)).fresh().flipped()
-            context.unify(arg_type, fn_type.a)
-            return [(context, fn_type.b)]
+            def k(Γ, t):
+                fresh_t = Γ.instantiate(t)
+                a = fresh_t.a
+                b = fresh_t.b
+                #print(arg_type, '~', 'instantiate({}) = {}'.format(t.a, a))
+                Γ.unify(arg_type, a)
+                #print(
+                #    '=>', b, '=', b.under(Γ),
+                #    'after applying', P.pretty(P.explode(f)))
+                #print(Γ)
+                return [(Γ, b)]
+            return self.analyze([Γ], f, k)
         h, t = l[0], l[1:]
-        return self.analyze([context], h, lambda new_context, inferred_type:
-            loop(new_context, t, arg_types + [inferred_type]))
-    return loop(context, args, [])
+        return self.analyze([Γ], h, lambda new_Γ, inferred_type:
+            loop(new_Γ, t, arg_types + [inferred_type]))
+    return loop(Γ, args, [])
 
 fun_call = Rule('_f(__args)', analyze_fun_call, 'fun_call')
 
-print_expr = expression('print(_a)', {'a': T.TVar('a')}, T.TNone(), 'print_expr')
+print_expr = expression('print(_a)', {'a': T.UVar('a')}, T.TNone(), 'print_expr')
 print_stmt = Rule(
     P.raw_pattern('print(_a)').body[0],
-    lambda self, context, a:
-        self.analyze([context], a, lambda new_context, inferred_type:
-            [(new_context, None)]))
+    lambda self, Γ, a:
+        self.analyze([Γ], a, lambda new_Γ, inferred_type:
+            [(new_Γ, None)]))
 
 # -------------------- basic rule set --------------------
 
@@ -395,7 +409,7 @@ if __name__ == '__main__':
         {'a': 'array[int(a)]', 'b': 'array[int(a)]'},
         'array[int(a)]', 'smush')
     import_numpy = Rule('import numpy as np',
-        lambda self, context: extend(self, context, {
+        lambda self, Γ: extend(self, Γ, {
             'np.ones': 'Fun((int(a),), array[a])'}),
         'import_numpy')
 

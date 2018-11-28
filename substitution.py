@@ -10,7 +10,6 @@ class Substitution:
         self.compare = compare
         self.equalities = set()
         self.bias = True
-        self.history = []
         self.hash = None
 
     def __str__(self):
@@ -78,11 +77,11 @@ class Substitution:
     def evars(self):
         return self.extract_sets(U.evars)
 
-    def tvars(self):
-        return self.extract_sets(U.tvars)
+    def uvars(self):
+        return self.extract_sets(U.uvars)
 
     # convert equality constraints to z3 formula
-    # assumes items implement .to_z3, .evars, .tvars, .under
+    # assumes items implement .to_z3, .evars, .uvars, .under
     # TODO: move this out of Substitution?
     def to_z3(self):
         import z3

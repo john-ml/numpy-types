@@ -11,11 +11,16 @@ class Context:
         self.Γ = {}
         self.F = T.BLit(True)
         self.names = {}
+        self.fixed = {}
         self.hash = None
         self.simple = None
 
     def __str__(self):
-        return '{} -> {} ({})'.format(self.F, U.typedict(self.Γ), self.σ)
+        return '{} -> {} ({} fixed) ({})'.format(
+            self.F,
+            U.typedict(self.Γ),
+            '{' + ', '.join(self.fixed) + '}',
+            self.σ)
 
     def __contains__(self, a):
         return a in self.Γ
@@ -30,6 +35,8 @@ class Context:
         c.σ.bias = self.σ.bias
         c.Γ = dict((renamed(k), renamed(v)) for k, v in self.Γ.items())
         c.F = renamed(self.F)
+        c.names = {(renaming[a] if a in renaming else a) for a in self.names}
+        c.fixed = {(renaming[a] if a in renaming else a) for a in self.names}
         return c
 
     def reduced(self):
@@ -56,13 +63,17 @@ class Context:
         c.Γ = dict(self.Γ)
         c.F = self.F
         c.names = set(self.names)
+        c.fixed = set(self.fixed)
         c.hash = self.hash
         c.simple = self.simple
         return c
 
-    def annotate(self, a, t):
+    def annotate(self, a, t, fixed=False):
         self.Γ[a] = t
-        self.names |= U.names_of(a) | U.names_of(t)
+        new_names = U.names_of(a) | U.names_of(t)
+        self.names |= new_names
+        if fixed:
+            self.fixed |= new_names
         self.hash = self.simple = None
         return self
 
@@ -70,6 +81,10 @@ class Context:
         if a not in self.Γ:
             raise ValueError('Unbound identifier: ' + a)
         return self.Γ[a].under(self)
+
+    def instantiate(self, t):
+        t = t.under(self)
+        return t.fresh(self.fixed | t.evars()).eapp(self.fixed)
 
     def find(self, a):
         return self.σ.find(a)
@@ -89,8 +104,8 @@ class Context:
     def evars(self):
         return self.σ.evars() | self.F.evars()
 
-    def tvars(self):
-        return self.σ.tvars() | self.F.tvars()
+    def uvars(self):
+        return self.σ.uvars() | self.F.uvars()
 
     def to_z3(self):
         import z3
@@ -117,8 +132,8 @@ class State:
     def evars(self):
         return U.mapreduce(U.union, U.evars, self.contexts, set())
 
-    def tvars(self):
-        return U.mapreduce(U.union, U.tvars, self.contexts, set())
+    def uvars(self):
+        return U.mapreduce(U.union, U.uvars, self.contexts, set())
 
     def to_z3(self):
         import z3
@@ -130,14 +145,14 @@ if __name__ == '__main__':
     # TODO if statements
     print(Context().to_z3())
     print(Context().evars())
-    print(Context().tvars())
+    print(Context().uvars())
 
     c = Context()
     c.push()
     print(c)
-    c.annotate('a', T.AVar(T.TVar('a')) + 1)
+    c.annotate('a', T.AVar(T.UVar('a')) + 1)
     c.union(1, 2)
-    c.assume(T.BVar(T.TVar('a')))
+    c.assume(T.BVar(T.UVar('a')))
     print(c)
     c.undo()
     print(c)

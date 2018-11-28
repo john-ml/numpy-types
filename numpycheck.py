@@ -25,7 +25,7 @@ def numpy_rules(alias):
         p = P('_a {} _b'.format(op))
         arg_types = lambda s: {'a': arr_type(s), 'b': arr_type(s)}
         same_dims = lambda s: [expression(p, arg_types(s), arr_type(s), '{}({})'.format(name, s))]
-        fresh_int = lambda: AVar(TVar(next(U.fresh_ids)))
+        fresh_int = lambda: AVar(UVar(next(U.fresh_ids)))
         scalar_broadcast = lambda s: [
             expression(p, {'a': fresh_int(), 'b': arr_type(s)}, arr_type(s),
                 '{}({})_left_scalar'.format(name, s)),
@@ -35,7 +35,7 @@ def numpy_rules(alias):
                 all_overloads(lambda s: scalar_broadcast(', '.join(s))))
     constructor = lambda name: all_overloads(lambda a: [
         expression(P('np.{}(({}))'.format(name, ', '.join('_' + b for b in a))),
-            dict((v, AVar(TVar(v))) for v in a),
+            dict((v, AVar(UVar(v))) for v in a),
             parse('array[{}]'.format(', '.join(a))),
             '{}({})'.format(name, ', '.join(a)))])
     def make_shape_rules(a):
@@ -44,7 +44,7 @@ def numpy_rules(alias):
             rules.append(expression(
                 P('_a.shape[_i]'),
                 {'a': arr_type(', '.join(a)), 'i': ALit(i)},
-                AVar(TVar(a[i])),
+                AVar(UVar(a[i])),
                 'shape({})({})'.format(', '.join(a), i)))
         return rules
     shape = all_overloads(make_shape_rules)
@@ -76,8 +76,10 @@ with open(sys.argv[1]) as f:
     s = f.read()
     c = Checker(rules)
     try:
-        c.check(ast.parse(s))
+        state = c.check(ast.parse(s))
         print('OK')
+        #for Γ in state:
+        #    print(Γ)
     except (CheckError, ConfusionError) as e:
         print(e.pretty(s))
     except Exception as e:

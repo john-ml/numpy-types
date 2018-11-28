@@ -3,7 +3,7 @@ indent = lambda space, s: '\n'.join(space + l for l in s.split('\n'))
 typedict = lambda d: ', '.join('{} : {}'.format(k, v) for k, v in d.items())
 union = lambda a, b: a | b
 evars = lambda a: a.evars()
-tvars = lambda a: a.tvars()
+uvars = lambda a: a.uvars()
 names_of = lambda a: a.names() if hasattr(a, 'names') else set()
 to_z3 = lambda a: a.to_z3()
 let = lambda a: a()
@@ -48,7 +48,7 @@ def ident2str(a):
 
 def to_quantified_z3(a):
     import z3
-    t = [b.to_z3() for b in a.tvars()]
+    t = [b.to_z3() for b in a.uvars()]
     e = [b.to_z3() for b in a.evars()]
     ex = z3.Exists(e, a.to_z3()) if len(e) > 0 else a.to_z3()
     return z3.ForAll(t, ex) if len(t) > 0 else ex
