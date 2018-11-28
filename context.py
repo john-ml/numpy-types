@@ -38,16 +38,13 @@ class Context:
         return self.simple
 
     def __hash__(self):
-        if self.hash is not None:
-            return self.hash
-        simple = self.reduced()
-        self.hash = hash((simple.σ, tuple(simple.Γ.items()), simple.F))
+        if self.hash is None:
+            simple = self.reduced()
+            self.hash = hash((simple.σ, tuple(simple.Γ.items()), simple.F))
         return self.hash
 
     def __eq__(self, other):
-        if type(other) is not Context or \
-           len(self.names) != len(other.names) or \
-           hash(self) != hash(other):
+        if type(other) is not Context or hash(self) != hash(other):
             return False
         self = self.reduced()
         other = other.reduced()

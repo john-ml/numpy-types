@@ -11,6 +11,7 @@ class Substitution:
         self.equalities = set()
         self.bias = True
         self.history = []
+        self.hash = None
 
     def __str__(self):
         constraints = ', '.join(str(l) + ' ~ ' + str(r) for l, r in self.equalities)
@@ -18,18 +19,24 @@ class Substitution:
             (' where ' + constraints if constraints != '' else '')
 
     def __hash__(self):
-        return hash((
-            tuple((a, self.find(a)) for a in self.m.items()),
-            tuple(self.equalities)))
+        if self.hash is None:
+            self.hash = hash((
+                tuple((a, self.find(a)) for a in self.m.items()),
+                tuple(self.equalities)))
+        return self.hash
 
     def __eq__(self, other):
-        return (self.m, self.equalities) == (other.m, other.equalities)
+        return (
+            type(other) is Substitution and
+            hash(self) == hash(other) and
+            (self.m, self.equalities) == (other.m, other.equalities))
 
     def copy(self):
         σ = Substitution(self.compare)
         σ.m = dict(self.m)
         σ.equalities = set(self.equalities)
         σ.bias = self.bias
+        σ.hash = self.hash
         return σ
 
     def find(self, a):
@@ -56,6 +63,7 @@ class Substitution:
             self.m[[a, b][self.bias]] = [a, b][not self.bias]
             self.equalities |= {(a, b)}
 
+        self.hash = None
         return self
 
     def equal_pairs(self):
