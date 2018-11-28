@@ -11,7 +11,7 @@ if len(sys.argv) < 2:
 
 def numpy_rules(alias):
     P = lambda s: s.replace('np.', alias + '.')
-    def all_overloads(f, n=2):
+    def all_overloads(f, n=5):
         c = 'a'
         s = [c]
         results = []
@@ -82,8 +82,4 @@ with open(sys.argv[1]) as f:
     except Exception as e:
         print(e)
 
-    #for (ast, contexts, action), (hits, _) in sorted(memo.items(), key=lambda a: a[1][0]):
-    #    print('{}\n{} hits ({})'.format(U.highlight(ast, s), hits, type(ast).__name__))
-    #    print('Contexts:')
-    #    for c in contexts:
-    #        print(str(c))
+    #dump_memo(s)

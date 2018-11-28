@@ -102,8 +102,10 @@ class ConfusionError(ASTError):
 
 no_op = lambda s, a: [(s, a)]
 
+# memoize past queries (remember which rules worked & the results they yielded)
+_memo = {}
+
 # type-checker acting on a set of checking rules
-memo = {}
 class Checker:
     def __init__(self, rules, return_type=T.TNone(), careful=False):
         self.rules = rules
@@ -111,16 +113,20 @@ class Checker:
         self.careful = careful
 
     # try each of the rules in order and run action corresponding to first matching rule
-    # Checker
-    # * [Context]
-    # * AST
-    # * (Context * a -> [Context * b])
-    # -> [Context * b]
+    # Checker * [Context] * AST * (Context * a -> [Context * b]) -> [Context * b]
     # fail with ConfusionError if no rules match
     # fail with CheckError if all rules that matched threw
     def analyze(self, contexts, ast, f = no_op):
+
+        # compute results for each applicable pattern
         k = (ast, tuple(contexts), None)
-        if k not in memo:
+        if k in _memo:
+            hits, a = _memo[k]
+            _memo[k] = (hits + 1, a)
+            if isinstance(a, Exception):
+                raise a
+            options = a
+        else:
             options = []
             for context in contexts:
                 errors = []
@@ -136,17 +142,12 @@ class Checker:
                         errors.append((rule, e))
             if options == []:
                 e = ConfusionError(ast) if errors == [] else CheckError(ast, errors)
-                memo[k] = (1, e)
+                _memo[k] = (1, e)
                 raise e
 
-            memo[k] = (1, options)
-        else:
-            n, a = memo[k]
-            memo[k] = (n + 1, a)
-            if isinstance(a, Exception):
-                raise a
-            options = a
+            _memo[k] = (1, options)
 
+        # run continuation with each result
         results = []
         errors = []
         for rule, option in options:
@@ -173,6 +174,13 @@ class Checker:
                 Checker(self.rules, self.return_type, careful=True).check(ast)
             else:
                 raise
+
+def dump_memo(s):
+    for (ast, contexts, action), (hits, _) in sorted(_memo.items(), key=lambda a: a[1][0]):
+        print('{}\n{} hits ({})'.format(U.highlight(ast, s), hits, type(ast).__name__))
+        print('Contexts:')
+        for c in contexts:
+            print(str(c))
 
 # -------------------- rule/checker combinators --------------------
 
