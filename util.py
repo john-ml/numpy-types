@@ -4,6 +4,7 @@ typedict = lambda d: ', '.join('{} : {}'.format(k, v) for k, v in d.items())
 union = lambda a, b: a | b
 evars = lambda a: a.evars()
 tvars = lambda a: a.tvars()
+names_of = lambda a: a.names() if hasattr(a, 'names') else set()
 to_z3 = lambda a: a.to_z3()
 let = lambda a: a()
 reducemap = lambda f, g, a, e: map(g, reduce(f, a, e))

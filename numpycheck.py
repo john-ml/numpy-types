@@ -83,4 +83,4 @@ with open(sys.argv[1]) as f:
     except Exception as e:
         print(e)
 
-    c.dump_memo(s)
+    #c.dump_memo(s)

@@ -10,6 +10,9 @@ class Context:
         self.σ = S.Substitution(lambda a, b: a << b)
         self.Γ = {}
         self.F = T.BLit(True)
+        self.names = {}
+        self.hash = None
+        self.simple = None
 
     def __str__(self):
         return '{} -> {} ({})'.format(self.F, U.typedict(self.Γ), self.σ)
@@ -17,11 +20,7 @@ class Context:
     def __contains__(self, a):
         return a in self.Γ
 
-    def reduced(self):
-        names_of = lambda a: a.names() if hasattr(a, 'names') else set()
-        renaming = dict(zip(sorted({name
-            for a, t in self.σ.m.items()
-            for name in names_of(a) | names_of(t)}), U.make_fresh()))
+    def renamed(self, renaming):
         renamed = lambda a: a.renamed(renaming) if hasattr(a, 'under') else a
 
         c = Context()
@@ -33,11 +32,23 @@ class Context:
         c.F = renamed(self.F)
         return c
 
+    def reduced(self):
+        if self.simple is None:
+            self.simple = self.renamed(dict(zip(sorted(self.names), U.make_fresh())))
+        return self.simple
+
     def __hash__(self):
-        self = self.reduced()
-        return hash((self.σ, tuple(self.Γ.items()), self.F))
+        if self.hash is not None:
+            return self.hash
+        simple = self.reduced()
+        self.hash = hash((simple.σ, tuple(simple.Γ.items()), simple.F))
+        return self.hash
 
     def __eq__(self, other):
+        if type(other) is not Context or \
+           len(self.names) != len(other.names) or \
+           hash(self) != hash(other):
+            return False
         self = self.reduced()
         other = other.reduced()
         return (self.σ, self.Γ, self.F) == (other.σ, other.Γ, other.F)
@@ -47,10 +58,15 @@ class Context:
         c.σ = self.σ.copy()
         c.Γ = dict(self.Γ)
         c.F = self.F
+        c.names = set(self.names)
+        c.hash = self.hash
+        c.simple = self.simple
         return c
 
     def annotate(self, a, t):
         self.Γ[a] = t
+        self.names |= U.names_of(a) | U.names_of(t)
+        self.hash = self.simple = None
         return self
 
     def typeof(self, a):
@@ -63,10 +79,14 @@ class Context:
 
     def union(self, a, b):
         self.σ.union(a, b)
+        self.names |= U.names_of(a) | U.names_of(b)
+        self.hash = self.simple = None
         return self
 
     def assume(self, G):
         self.F = T.And(self.F, G)
+        self.names |= U.names_of(G)
+        self.hash = self.simple = None
         return self
 
     def evars(self):

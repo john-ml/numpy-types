@@ -18,7 +18,9 @@ class Substitution:
             (' where ' + constraints if constraints != '' else '')
 
     def __hash__(self):
-        return hash((tuple(self.m.items()), tuple(self.equalities)))
+        return hash((
+            tuple((a, self.find(a)) for a in self.m.items()),
+            tuple(self.equalities)))
 
     def __eq__(self, other):
         return (self.m, self.equalities) == (other.m, other.equalities)
