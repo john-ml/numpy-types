@@ -23,5 +23,5 @@ print(u)
 u = u + 1
 print(u)
 
-g = num.ones(d.shape[0] + 1) + num.zeros(d.shape[1]) * 3
+g = num.ones(d.shape[0] + 1) + num.zeros(d.shape[1]) * 3 - 5
 print(g)

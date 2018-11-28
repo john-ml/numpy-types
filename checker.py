@@ -169,7 +169,6 @@ class Checker:
             state = C.State([s for s, _ in pairs])
             return U.verify(state)
         except (ValueError, CheckError, T.UnificationError) as e:
-            raise
             if not self.careful:
                 Checker(self.rules, self.return_type, careful=True).check(ast)
             else:
