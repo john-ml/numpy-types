@@ -89,12 +89,13 @@ class Context:
 
     def gen(self, t, blacklist=set()):
         names = self.fixed - blacklist
+        t = t.under(self).gen(names)
         self.σ.gen(names)
         for k, v in self.Γ.items():
             self.Γ[k] = self.Γ[k].gen(names)
         self.F = self.F.gen(names)
         self.hash = self.simple = None
-        return t.under(self).gen(names)
+        return t
 
     def instantiate(self, t):
         t = t.under(self)

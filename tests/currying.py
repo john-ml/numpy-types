@@ -34,7 +34,7 @@ def plus(a: int, b: int) -> a + b:
 def test(a: int, b: int) -> None:
     add = curry(plus)
     app_c = curry(app)
-    three = app(app_c(add)(a), b)
+    three = app(app(add, a), b)
 
     # Unsatisfiable constraint: ForAll([a, b], Implies(True, And(a + b == 3)))
     result = np.zeros(three) + np.zeros(3)

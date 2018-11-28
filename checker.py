@@ -302,6 +302,7 @@ def analyze_assign(self, Γ, lhs, rhs, anno=None):
     def k(new_Γ, new_t):
         if lhs in new_Γ:
             old_t = new_Γ.typeof(lhs)
+            new_t = new_t.under(new_Γ)
             if not (isinstance(old_t, T.AExp) and isinstance(new_t, T.AExp) or
                     isinstance(old_t, T.BExp) and isinstance(new_t, T.BExp)):
                 new_Γ.unify(old_t, new_t)
@@ -310,6 +311,10 @@ def analyze_assign(self, Γ, lhs, rhs, anno=None):
             new_Γ.unify(new_t, t)
             new_Γ.annotate(lhs, t, fixed=True)
         else:
+            new_t = new_t.under(new_Γ)
+            if type(new_t) is T.Fun:
+                # uninstantiate function bindings
+                new_t = new_t.flipped(new_Γ.fixed)
             new_Γ.annotate(lhs, new_t)
         return [(new_Γ, None)]
     return self.analyze([Γ], rhs, k)
@@ -322,6 +327,7 @@ assign = Rule('_lhs = _rhs', analyze_assign, 'assign')
 def analyze_ident(self, Γ, a):
     t = Γ.typeof(U.ident2str(a))
     if type(t) is T.Fun:
+        # immediately instantiate fn bindings (prenex poly)
         t = Γ.instantiate(t)
     return [(Γ, t)]
 
@@ -349,9 +355,7 @@ def analyze_fun_def(self, Γ, f, args, return_type, body):
         lambda new_Γ, _: (lambda _:
             [(Γ.annotate(f, polymorphic_fun_type), None)])(U.verify(new_Γ)))
 
-fun_def = Rule('''
-def _f(__args) -> _return_type:
-    __body''', analyze_fun_def, 'fun_def')
+fun_def = Rule('def _f(__args) -> _return_type:\n    __body', analyze_fun_def, 'fun_def')
 
 lit_None = literal('None', T.TNone())
 lit_True = literal('True', T.BLit(True))
@@ -375,26 +379,20 @@ def analyze_fun_call(self, Γ, f, args):
         if l == []:
             arg_type = T.Tuple(arg_types)
             def k(Γ, t):
-                fresh_t = Γ.instantiate(t)
-                #print('instantiate({}) = {}'.format(t, fresh_t))
-                if type(fresh_t) is T.EVar:
-                    a = next(U.fresh_ids)
-                    b = next(U.fresh_ids)
-                    Γ.fix({a, b})
-                    fresh_fun_t = T.Fun(
-                        T.EVar(a),
-                        T.EVar(b))
-                    #print(fresh_t, '~', fresh_fun_t)
-                    Γ.unify(t, fresh_t)
-                    Γ.unify(fresh_t, fresh_fun_t)
-                    fresh_t = fresh_fun_t
-                #print(arg_type.under(Γ), '~', fresh_t.a.under(Γ))
-                Γ.unify(arg_type, fresh_t.a)
+                #print('t =', t)
+                a = next(U.fresh_ids)
+                b = next(U.fresh_ids)
+                Γ.fix({a, b})
+                fn = T.Fun(T.EVar(a), T.EVar(b))
+                Γ.unify(t, fn)
+                #print(t, '~', fn)
+                #print(arg_type.under(Γ), '~', fn.a.under(Γ))
+                Γ.unify(arg_type, fn.a)
                 #print(
-                #    '=>', fresh_t.b, '=', fresh_t.b.under(Γ),
+                #    '=>', fn.b, '=', fn.b.under(Γ),
                 #    'after applying', P.pretty(P.explode(f)))
                 #print('Γ =', Γ)
-                return [(Γ, fresh_t.b)]
+                return [(Γ, fn.b)]
             return self.analyze([Γ], f, k)
         h, t = l[0], l[1:]
         return self.analyze([Γ], h, lambda new_Γ, inferred_type:
@@ -420,15 +418,15 @@ def analyze_lambda_expr(self, Γ, args, e):
         #print('Γ2 =', Γ2)
         #print('t =', t, '=>', t.under(Γ2))
         #print('args =', ', '.join(map(str, arg_types)))
-        fn = Γ2.gen(T.Fun(T.Tuple(arg_types), t), Γ1.fixed)
-        #print('Fun({}, {}) => {}'.format(T.Tuple(arg_types), t, fn))
+        fn = T.Fun(T.Tuple(arg_types), t).under(Γ2)
         #print('Γ =', Γ)
         for name in Γ.Γ:
             t_Γ = Γ.typeof(name)
             t_Γ2 = t_Γ.under(Γ2)
             Γ.unify(t_Γ, t_Γ2)
-            Γ.fix(t_Γ2.names() & (Γ2.fixed - Γ.fixed))
+            Γ.fix(t_Γ2.names() & (Γ2.fixed - Γ1.fixed))
         #print('new Γ =', Γ)
+        #print('returning', fn)
         #print()
         return [(Γ, fn)]
     return self.analyze([Γ1], e, k)
