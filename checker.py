@@ -213,7 +213,7 @@ def expression(s, assumptions, return_type, name=None):
         def loop(Γ, pairs, analyzed):
             if pairs == []:
                 # TODO better way of naming
-                renaming = dict(zip(names, map(lambda a: 'tmp' + a, U.fresh_ids)))
+                renaming = dict(zip(names, U.fresh_ids))
                 instantiate = lambda t: t.renamed(renaming).eapp()
                 for name, inferred_type in analyzed:
                     Γ.unify(inferred_type, instantiate(assumptions[name]))
