@@ -292,17 +292,30 @@ cond_expr = Rule(
             analyze_cond_expr(self, new_Γ, t, l, r)),
     'cond_expr')
 
-def analyze_assign(self, Γ, lhs, rhs):
+def analyze_assign(self, Γ, lhs, rhs, anno=None):
     assert type(lhs) is A.Name
+    lhs = U.ident2str(lhs)
+
+    if rhs is None and anno is not None:
+        return [(Γ.annotate(lhs, T.from_ast(anno), fixed=True), None)]
+
     def k(new_Γ, new_t):
-        if U.ident2str(lhs) in new_Γ:
-            old_t = new_Γ.typeof(U.ident2str(lhs))
+        if lhs in new_Γ:
+            old_t = new_Γ.typeof(lhs)
             if not (isinstance(old_t, T.AExp) and isinstance(new_t, T.AExp) or
                     isinstance(old_t, T.BExp) and isinstance(new_t, T.BExp)):
                 new_Γ.unify(old_t, new_t)
-        new_Γ.annotate(U.ident2str(lhs), new_t)
+        if anno is not None:
+            t = T.from_ast(anno)
+            new_Γ.unify(new_t, t)
+            new_Γ.annotate(lhs, t, fixed=True)
+        else:
+            new_Γ.annotate(lhs, new_t)
         return [(new_Γ, None)]
     return self.analyze([Γ], rhs, k)
+
+assign_anno = Rule(P.raw_pattern('_lhs: _anno = _rhs').body[0],
+    analyze_assign, 'assign_anno')
 
 assign = Rule('_lhs = _rhs', analyze_assign, 'assign')
 
@@ -392,6 +405,7 @@ print_stmt = Rule(
 
 basic_rules = [
     module,
+    assign_anno,
     assign,
     skip,
     ident,
@@ -513,3 +527,12 @@ a = np.ones(3)
 b = np.zeros(3)
 c = smush(a, b)
 ''')
+
+    try_check('''
+b: bool
+b = None
+''')
+
+    try_check('b: bool = None')
+
+    try_check('b: bool = (True or False) and True')
