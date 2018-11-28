@@ -564,7 +564,8 @@ def from_ast(ast):
         ('a__Tuple', lambda a: Tuple([go(i) for i in a.elts])),
 
         ('True', lambda: BLit(True)),
-        ('False', lambda: BLit(False))]
+        ('False', lambda: BLit(False)),
+        ('None', lambda: TNone())]
     def go(ast):
         for s, action in rules:
             matches = P.matches(P.make_pattern(s), ast)
@@ -598,7 +599,8 @@ def parse(s):
         ('a__Tuple', lambda a: Tuple([go(i) for i in a.elts])),
 
         ('True', lambda: BLit(True)),
-        ('False', lambda: BLit(False))]
+        ('False', lambda: BLit(False)),
+        ('None', lambda: TNone())]
     def go(ast):
         for s, action in rules:
             matches = P.matches(P.make_pattern(s), ast)

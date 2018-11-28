@@ -28,3 +28,5 @@ class ArrayType:
     def __getitem__(self, a):
         return 0
 array = ArrayType()
+def Fun(*args):
+    return 0

@@ -307,7 +307,10 @@ def analyze_assign(self, Γ, lhs, rhs):
 assign = Rule('_lhs = _rhs', analyze_assign, 'assign')
 
 def analyze_ident(self, Γ, a):
-    return [(Γ, Γ.typeof(U.ident2str(a)))]
+    t = Γ.typeof(U.ident2str(a))
+    if type(t) is T.Fun:
+        t = Γ.instantiate(t)
+    return [(Γ, t)]
 
 ident = Rule('a__Name', analyze_ident, 'ident')
 attr_ident = Rule('a__Attribute', analyze_ident, 'attr_ident')
@@ -360,9 +363,10 @@ def analyze_fun_call(self, Γ, f, args):
             arg_type = T.Tuple(arg_types)
             def k(Γ, t):
                 fresh_t = Γ.instantiate(t)
+                #print('instantiate({}) = {}'.format(t, fresh_t))
                 a = fresh_t.a
                 b = fresh_t.b
-                #print(arg_type, '~', 'instantiate({}) = {}'.format(t.a, a))
+                #print(arg_type.under(Γ), '~', a.under(Γ))
                 Γ.unify(arg_type, a)
                 #print(
                 #    '=>', b, '=', b.under(Γ),
