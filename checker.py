@@ -3,6 +3,7 @@ import pattern as P
 import context as C
 import ast as A
 import nptype as T
+from typerule import typerule
 
 # typechecking rule
 # action : Checker * Context * ..kwargs -> [Context * ?a]
@@ -245,16 +246,19 @@ def extend(self, Γ, bindings, k=no_op):
 
 # -------------------- basic type-checking rules --------------------
 
+@typerule(globals())
 def analyze_body(self, Γ, body, k=no_op):
     if body == []:
         return k(Γ, None)
     h, t = body[0], body[1:]
-    return self.analyze([Γ], h, lambda new_Γ, _:
-        analyze_body(self, (U.verify(new_Γ) if self.careful else new_Γ), t, k))
+    Γ, _ <- self.analyze([Γ], h)
+    return analyze_body(self, (U.verify(Γ) if self.careful else Γ), t, k)
 
 module = Rule(P.raw_pattern('__body'), analyze_body, 'module')
 
-def analyze_cond(self, Γ, t, top, bot, k=no_op):
+@typerule(globals())
+def analyze_cond(self, Γ, p, top, bot, k=no_op):
+    Γ, t <- self.analyze([Γ], p)
     top_Γ = Γ.copy().assume(t)
     bot_Γ = Γ.copy().assume(T.Not(t))
     top_results = analyze_body(self, top_Γ, top)
@@ -268,15 +272,13 @@ if _p:
     __top
 else:
     __bot
-''',
-lambda self, Γ, p, top, bot:
-    self.analyze([Γ], p, lambda new_Γ, t:
-        analyze_cond(self, new_Γ, t, top, bot)),
-'cond')
+''', analyze_cond, 'cond')
 
 skip = Rule('pass', lambda self, Γ: [(Γ, None)], 'skip')
 
-def analyze_cond_expr(self, Γ, t, l, r, k=no_op):
+@typerule(globals())
+def analyze_cond_expr(self, Γ, p, l, r, k=no_op):
+    Γ, t <- self.analyze([Γ], p)
     top_Γ = Γ.copy().assume(t)
     bot_Γ = Γ.copy().assume(T.Not(t))
     top_results = self.analyze([top_Γ], l)
@@ -285,13 +287,9 @@ def analyze_cond_expr(self, Γ, t, l, r, k=no_op):
         for s, a in top_results + bot_results
         for b in k(s, a)]
 
-cond_expr = Rule(
-    '_l if _p else _r',
-    lambda self, Γ, l, p, r:
-        self.analyze([Γ], p, lambda new_Γ, t:
-            analyze_cond_expr(self, new_Γ, t, l, r)),
-    'cond_expr')
+cond_expr = Rule('_l if _p else _r', analyze_cond_expr, 'cond_expr')
 
+@typerule(globals())
 def analyze_assign(self, Γ, lhs, rhs, anno=None):
     assert type(lhs) is A.Name
     lhs = U.ident2str(lhs)
@@ -299,25 +297,25 @@ def analyze_assign(self, Γ, lhs, rhs, anno=None):
     if rhs is None and anno is not None:
         return [(Γ.annotate(lhs, T.from_ast(anno), fixed=True), None)]
 
-    def k(new_Γ, new_t):
-        if lhs in new_Γ:
-            old_t = new_Γ.typeof(lhs)
-            new_t = new_t.under(new_Γ)
-            if not (isinstance(old_t, T.AExp) and isinstance(new_t, T.AExp) or
-                    isinstance(old_t, T.BExp) and isinstance(new_t, T.BExp)):
-                new_Γ.unify(old_t, new_t)
-        if anno is not None:
-            t = T.from_ast(anno)
-            new_Γ.unify(new_t, t)
-            new_Γ.annotate(lhs, t, fixed=True)
-        else:
-            new_t = new_t.under(new_Γ)
-            if type(new_t) is T.Fun:
-                # uninstantiate function bindings
-                new_t = new_t.flipped(new_Γ.fixed)
-            new_Γ.annotate(lhs, new_t)
-        return [(new_Γ, None)]
-    return self.analyze([Γ], rhs, k)
+    Γ, new_t <- self.analyze([Γ], rhs)
+
+    if lhs in Γ:
+        old_t = Γ.typeof(lhs)
+        new_t = new_t.under(Γ)
+        if not (isinstance(old_t, T.AExp) and isinstance(new_t, T.AExp) or
+                isinstance(old_t, T.BExp) and isinstance(new_t, T.BExp)):
+            Γ.unify(old_t, new_t)
+    if anno is not None:
+        t = T.from_ast(anno)
+        Γ.unify(new_t, t)
+        Γ.annotate(lhs, t, fixed=True)
+    else:
+        new_t = new_t.under(Γ)
+        if type(new_t) is T.Fun:
+            # uninstantiate function bindings
+            new_t = new_t.flipped(Γ.fixed)
+        Γ.annotate(lhs, new_t)
+    return [(Γ, None)]
 
 assign_anno = Rule(P.raw_pattern('_lhs: _anno = _rhs').body[0],
     analyze_assign, 'assign_anno')
@@ -334,6 +332,7 @@ def analyze_ident(self, Γ, a):
 ident = Rule('a__Name', analyze_ident, 'ident')
 attr_ident = Rule('a__Attribute', analyze_ident, 'attr_ident')
 
+@typerule(globals())
 def analyze_fun_def(self, Γ, f, args, return_type, body):
     arg_types = []
     nested_Γ = Γ.copy()
@@ -349,11 +348,10 @@ def analyze_fun_def(self, Γ, f, args, return_type, body):
     polymorphic_fun_type = fun_type.fresh(Γ.fixed)
     #print('fun_type =', fun_type)
     #print('polymorphic_fun_type =', polymorphic_fun_type)
-    return analyze_body(
-        self.returning(r),
-        nested_Γ, body,
-        lambda new_Γ, _: (lambda _:
-            [(Γ.annotate(f, polymorphic_fun_type), None)])(U.verify(new_Γ)))
+
+    new_Γ, _ <- analyze_body(self.returning(r), nested_Γ, body)
+    U.verify(new_Γ)
+    return [(Γ.annotate(f, polymorphic_fun_type), None)]
 
 fun_def = Rule('def _f(__args) -> _return_type:\n    __body', analyze_fun_def, 'fun_def')
 
@@ -375,28 +373,28 @@ ret = Rule('return _a', lambda self, Γ, a:
         [(new_Γ.unify(self.return_type, t), None)]), 'return')
 
 def analyze_fun_call(self, Γ, f, args):
+    # FIXME runs the decorator on each call to analzye_fun_call
+    @typerule({**globals(), **locals()})
     def loop(Γ, l, arg_types):
         if l == []:
             arg_type = T.Tuple(arg_types)
-            def k(Γ, t):
-                #print('t =', t)
-                a = next(U.fresh_ids)
-                b = next(U.fresh_ids)
-                Γ.fix({a, b})
-                fn = T.Fun(T.EVar(a), T.EVar(b))
-                Γ.unify(t, fn)
-                #print(t, '~', fn)
-                #print(arg_type.under(Γ), '~', fn.a.under(Γ))
-                Γ.unify(arg_type, fn.a)
-                #print(
-                #    '=>', fn.b, '=', fn.b.under(Γ),
-                #    'after applying', P.pretty(P.explode(f)))
-                #print('Γ =', Γ)
-                return [(Γ, fn.b)]
-            return self.analyze([Γ], f, k)
+            Γ, t <- self.analyze([Γ], f)
+            a = next(U.fresh_ids)
+            b = next(U.fresh_ids)
+            Γ.fix({a, b})
+            fn = T.Fun(T.EVar(a), T.EVar(b))
+            Γ.unify(t, fn)
+            #print(t, '~', fn)
+            #print(arg_type.under(Γ), '~', fn.a.under(Γ))
+            Γ.unify(arg_type, fn.a)
+            #print(
+            #    '=>', fn.b, '=', fn.b.under(Γ),
+            #    'after applying', P.pretty(P.explode(f)))
+            #print('Γ =', Γ)
+            return [(Γ, fn.b)]
         h, t = l[0], l[1:]
-        return self.analyze([Γ], h, lambda new_Γ, inferred_type:
-            loop(new_Γ, t, arg_types + [inferred_type]))
+        Γ, inferred_type <- self.analyze([Γ], h)
+        return loop(Γ, t, arg_types + [inferred_type])
     return loop(Γ, args, [])
 
 fun_call = Rule('_f(__args)', analyze_fun_call, 'fun_call')
@@ -404,9 +402,7 @@ fun_call = Rule('_f(__args)', analyze_fun_call, 'fun_call')
 print_expr = expression('print(_a)', {'a': T.UVar('a')}, T.TNone(), 'print_expr')
 print_stmt = Rule(
     P.raw_pattern('print(_a)').body[0],
-    lambda self, Γ, a:
-        self.analyze([Γ], a, lambda new_Γ, inferred_type:
-            [(new_Γ, None)]))
+    lambda self, Γ, a: self.analyze([Γ], a, lambda Γ, _: [(Γ, None)]))
 
 def analyze_lambda_expr(self, Γ, args, e):
     arg_ids = tuple(U.take(len(args), U.fresh_ids))
@@ -414,22 +410,21 @@ def analyze_lambda_expr(self, Γ, args, e):
     Γ1 = Γ.copy()
     for a, t in zip(map(U.ident2str, args), arg_types):
         Γ1.annotate(a, t, fixed=True)
-    def k(Γ2, t):
-        #print('Γ2 =', Γ2)
-        #print('t =', t, '=>', t.under(Γ2))
-        #print('args =', ', '.join(map(str, arg_types)))
-        fn = T.Fun(T.Tuple(arg_types), t).under(Γ2)
-        #print('Γ =', Γ)
-        for name in Γ.Γ:
-            t_Γ = Γ.typeof(name)
-            t_Γ2 = t_Γ.under(Γ2)
-            Γ.unify(t_Γ, t_Γ2)
-            Γ.fix(t_Γ2.names() & (Γ2.fixed - Γ1.fixed))
-        #print('new Γ =', Γ)
-        #print('returning', fn)
-        #print()
-        return [(Γ, fn)]
-    return self.analyze([Γ1], e, k)
+    Γ2, t <- self.analyze([Γ1], e)
+    #print('Γ2 =', Γ2)
+    #print('t =', t, '=>', t.under(Γ2))
+    #print('args =', ', '.join(map(str, arg_types)))
+    fn = T.Fun(T.Tuple(arg_types), t).under(Γ2)
+    #print('Γ =', Γ)
+    for name in Γ.Γ:
+        t_Γ = Γ.typeof(name)
+        t_Γ2 = t_Γ.under(Γ2)
+        Γ.unify(t_Γ, t_Γ2)
+        Γ.fix(t_Γ2.names() & (Γ2.fixed - Γ1.fixed))
+    #print('new Γ =', Γ)
+    #print('returning', fn)
+    #print()
+    return [(Γ, fn)]
 
 lambda_expr = Rule('lambda __args: _e', analyze_lambda_expr, 'lambda_expr')
 
