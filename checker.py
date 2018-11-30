@@ -215,7 +215,6 @@ def expression(s, assumptions, return_type, name=None):
         names = {v for _, t in assumptions.items() for v in t.names()} | return_type.names()
         def loop(Γ, pairs, analyzed):
             if pairs == []:
-                # TODO better way of naming
                 renaming = dict(zip(names, U.fresh_ids))
                 instantiate = lambda t: t.renamed(renaming).eapp()
                 for name, inferred_type in analyzed:
@@ -225,6 +224,29 @@ def expression(s, assumptions, return_type, name=None):
             return self.analyze([Γ], ast, lambda new_Γ, inferred_type:
                 loop(new_Γ, tail, analyzed + [(name, inferred_type)]))
         return loop(Γ, list(kwargs.items()), [])
+    return Rule(s, f, name)
+
+# given a pattern string s, and assumptions about the types of each capture group,
+# return return_type
+def expression(s, assumptions, return_type, name=None):
+    to_type = lambda a: (T.parse(a) if type(a) is str else a)
+    assumptions = dict((k, to_type(v)) for k, v in assumptions.items())
+    return_type = to_type(return_type)
+
+    @typerule({**globals(), **locals()})
+    def f(self, Γ, **kwargs):
+        names = {v for _, t in assumptions.items() for v in t.names()} | return_type.names()
+
+        for name, ast in analyzed, Γ <- kwargs.items():
+            Γ, inferred_type <- self.analyze([Γ], ast)
+            yield name, inferred_type
+
+        renaming = dict(zip(names, U.fresh_ids))
+        instantiate = lambda t: t.renamed(renaming).eapp()
+        for name, inferred_type in analyzed:
+            Γ.unify(inferred_type, instantiate(assumptions[name]))
+        return [(Γ, instantiate(return_type))]
+
     return Rule(s, f, name)
 
 def literal(s, t, name=None):
@@ -250,11 +272,11 @@ def extend(self, Γ, bindings, k=no_op):
 
 @typerule(globals())
 def analyze_body(self, Γ, body, k=no_op):
-    if body == []:
-        return k(Γ, None)
-    h, t = body[0], body[1:]
-    Γ, _ <- self.analyze([Γ], h)
-    return analyze_body(self, (U.verify(Γ) if self.careful else Γ), t, k)
+    for a in _, Γ <- body:
+        Γ, __ <- self.analyze([Γ], a)
+        if self.careful:
+            U.verify(Γ)
+    return k(Γ, None)
 
 module = Rule(P.raw_pattern('__body'), analyze_body, 'module')
 
@@ -374,30 +396,26 @@ ret = Rule('return _a', lambda self, Γ, a:
     self.analyze([Γ], a, lambda new_Γ, t:
         [(new_Γ.unify(self.return_type, t), None)]), 'return')
 
+@typerule(globals())
 def analyze_fun_call(self, Γ, f, args):
-    # FIXME runs the decorator on each call to analzye_fun_call
-    @typerule({**globals(), **locals()})
-    def loop(Γ, l, arg_types):
-        if l == []:
-            arg_type = T.Tuple(arg_types)
-            Γ, t <- self.analyze([Γ], f)
-            a = next(U.fresh_ids)
-            b = next(U.fresh_ids)
-            Γ.fix({a, b})
-            fn = T.Fun(T.EVar(a), T.EVar(b))
-            Γ.unify(t, fn)
-            #print(t, '~', fn)
-            #print(arg_type.under(Γ), '~', fn.a.under(Γ))
-            Γ.unify(arg_type, fn.a)
-            #print(
-            #    '=>', fn.b, '=', fn.b.under(Γ),
-            #    'after applying', P.pretty(P.explode(f)))
-            #print('Γ =', Γ)
-            return [(Γ, fn.b)]
-        h, t = l[0], l[1:]
-        Γ, inferred_type <- self.analyze([Γ], h)
-        return loop(Γ, t, arg_types + [inferred_type])
-    return loop(Γ, args, [])
+    for arg in arg_types, Γ <- args:
+        Γ, inferred_type <- self.analyze([Γ], arg)
+        yield inferred_type
+    arg_type = T.Tuple(arg_types)
+    Γ, t <- self.analyze([Γ], f)
+    a = next(U.fresh_ids)
+    b = next(U.fresh_ids)
+    Γ.fix({a, b})
+    fn = T.Fun(T.EVar(a), T.EVar(b))
+    Γ.unify(t, fn)
+    #print(t, '~', fn)
+    #print(arg_type.under(Γ), '~', fn.a.under(Γ))
+    Γ.unify(arg_type, fn.a)
+    #print(
+    #    '=>', fn.b, '=', fn.b.under(Γ),
+    #    'after applying', P.pretty(P.explode(f)))
+    #print('Γ =', Γ)
+    return [(Γ, fn.b)]
 
 fun_call = Rule('_f(__args)', analyze_fun_call, 'fun_call')
 
@@ -406,6 +424,7 @@ print_stmt = Rule(
     P.raw_pattern('print(_a)').body[0],
     lambda self, Γ, a: self.analyze([Γ], a, lambda Γ, _: [(Γ, None)]))
 
+@typerule(globals())
 def analyze_lambda_expr(self, Γ, args, e):
     arg_ids = tuple(U.take(len(args), U.fresh_ids))
     arg_types = [T.EVar(name) for name in arg_ids]
