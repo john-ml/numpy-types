@@ -211,27 +211,6 @@ def expression(s, assumptions, return_type, name=None):
     to_type = lambda a: (T.parse(a) if type(a) is str else a)
     assumptions = dict((k, to_type(v)) for k, v in assumptions.items())
     return_type = to_type(return_type)
-    def f(self, Γ, **kwargs):
-        names = {v for _, t in assumptions.items() for v in t.names()} | return_type.names()
-        def loop(Γ, pairs, analyzed):
-            if pairs == []:
-                renaming = dict(zip(names, U.fresh_ids))
-                instantiate = lambda t: t.renamed(renaming).eapp()
-                for name, inferred_type in analyzed:
-                    Γ.unify(inferred_type, instantiate(assumptions[name]))
-                return [(Γ, instantiate(return_type))]
-            (name, ast), tail = pairs[0], pairs[1:]
-            return self.analyze([Γ], ast, lambda new_Γ, inferred_type:
-                loop(new_Γ, tail, analyzed + [(name, inferred_type)]))
-        return loop(Γ, list(kwargs.items()), [])
-    return Rule(s, f, name)
-
-# given a pattern string s, and assumptions about the types of each capture group,
-# return return_type
-def expression(s, assumptions, return_type, name=None):
-    to_type = lambda a: (T.parse(a) if type(a) is str else a)
-    assumptions = dict((k, to_type(v)) for k, v in assumptions.items())
-    return_type = to_type(return_type)
 
     @typerule({**globals(), **locals()})
     def f(self, Γ, **kwargs):

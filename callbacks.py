@@ -5,63 +5,73 @@ callback_names = map(
     lambda a: '__callback{}__'.format(a),
     U.make_fresh())
 
-# assumes:
-#     function definition saved in file
-#     function defined using def
-#     function declaration is one line
-#
-# desugars
-#
-#     a, b, .. <- f(x, y, ..)
-#     s
-#
-# into (k fresh)
-#
-#     def k(a, b, ..):
-#         s
-#     return f(x, y, .., k)
-#
-#
-# and
-#
-#     for a, b, .. in l1 <- l:
-#         s1
-#         c, d, .. <- f(x, y, ..)
-#         s2
-#         e, f, .. <- g(z, w, ..)
-#         s3
-#     s
-#
-# into (loop, l2, k, k1 fresh)
-#
-#     def loop(l2, l1=()):
-#         if l != ():
-#             (a, b, ..), l = l[0], l[1:]
-#             s1*
-#             def k(c, d, ..):
-#                 s2*
-#                 def k1(e, f, ..):
-#                     s3*
-#                 return g(z, w, .., k1)
-#             return f(x, y, .., k)
-#         else:
-#             s
-#     loop(tuple(l))
-#
-# where s1*, s2*, s3* are s1, s2, s3 with
-#
-#     yield a, b, ..
-#
-# replaced by
-#
-#     return loop(l, l1 + ((a, b, ..),))
-#
-# if there are no yields, insert
-#
-#     return loop(l, l1 + (None,))
-#
-# at the end of s3.
 def callbacks(context):
+    """
+    augment a function with 'callback notation'
+
+    assumes:
+        function definition saved in file
+        function defined using def
+        function declaration is one line
+
+    desugars
+
+        a, b, .. <- f(x, y, ..)
+        s
+
+    into (k fresh)
+
+        def k(a, b, ..):
+            s
+        return f(x, y, .., k)
+
+    and
+
+        for a, b, .. in l1, α, β, .. <- l:
+            s1
+            c, d, .. <- f(x, y, ..)
+            s2
+            e, f, .. <- g(z, w, ..)
+            s3
+        s
+
+    into (loop, l2, k, k1 fresh)
+
+        def loop(l2, α, β, .., l1=()):
+            if l != ():
+                (a, b, ..), l = l[0], l[1:]
+                s1*
+                def k(c, d, ..):
+                    s2*
+                    def k1(e, f, ..):
+                        s3*
+                    return g(z, w, .., k1)
+                return f(x, y, .., k)
+            else:
+                s
+        loop(tuple(l), α, β, .., l1=())
+
+    where s1*, s2*, s3* are s1, s2, s3 with
+
+        yield a, b, ..
+
+    replaced by
+
+        return loop(l, α, β, .., l1 + ((a, b, ..),))
+
+    if there are no yields, insert
+
+        return loop(l, l1 + (None,))
+
+    at the end of s3.
+
+    the resulting code:
+        destructures each item in l into a, b, ..
+        captures variables α, β, .. for 'modification within the loop'
+        runs the loop body with the proper callbacks
+        accumulates the values yielded by each loop iteration in l1
+        runs the code 'after' the loop with l1 and updated α, β, ..
+    """
     def decorator(f):
         lines = inspect.getsource(f).split('\n')
         lines = lines[1:] # drop decorator header
