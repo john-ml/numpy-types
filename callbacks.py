@@ -38,7 +38,7 @@ def callbacks(context):
     into (loop, l2, k, k1 fresh)
 
         def loop(l2, α, β, .., l1=()):
-            if l != ():
+            if l2 != ():
                 (a, b, ..), l = l[0], l[1:]
                 s1*
                 def k(c, d, ..):
@@ -49,7 +49,7 @@ def callbacks(context):
                 return f(x, y, .., k)
             else:
                 s
-        loop(tuple(l), α, β, .., l1=())
+        return loop(tuple(l), α, β, .., l1=())
 
     where s1*, s2*, s3* are s1, s2, s3 with
 
