@@ -9,7 +9,7 @@ callback_names = map(
 #   function definition saved in file
 #   function defined using def
 #   function declaration is one line
-def typerule(context):
+def callbacks(context):
     def decorator(f):
         lines = inspect.getsource(f).split('\n')
         lines = lines[1:] # drop decorator header
@@ -62,7 +62,7 @@ if __name__ == '__main__':
     def g(a, callback):
         return callback(a + 1, a + 2)
 
-    @typerule
+    @callbacks
     def f(a):
         b, c <- g(a)
         return b + c

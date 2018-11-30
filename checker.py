@@ -3,7 +3,9 @@ import pattern as P
 import context as C
 import ast as A
 import nptype as T
-from typerule import typerule
+from callbacks import callbacks
+
+typerule = callbacks
 
 # typechecking rule
 # action : Checker * Context * ..kwargs -> [Context * ?a]
