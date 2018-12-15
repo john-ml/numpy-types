@@ -24,6 +24,23 @@ def f(p: bool, n: int) -> array[n + 2]:
 
 `python3 npcheck.py <filename>` to check a file.
 
+## Custom typechecking rules
+
+The typechecker is written so that users can define custom typechecking rules.
+A `callback` decorator provides some syntactic sugar to make this easier.
+
+For example, the following code defines a rule which essentially checks that the `+` operator has type `forall a. a -> a -> a`:
+
+```py
+@callbacks(globals())
+def analyze_plus(self, context, lhs, rhs):
+    context, lhs_type <- self.analyze([context], lhs)
+    context, rhs_type <- self.analyze([context], rhs)
+    context.unify(lhs_type, rhs_type)
+    return [(context, lhs_type)]
+plus = Rule('_lhs + rhs', analyze_plus, 'plus')
+```
+
 ## Some examples
 
 ### Type inference for lambda expressions
@@ -47,7 +64,7 @@ def test(a: int, b: int) -> None:
 ### Existential types
 
 ```py
-# a nontrivial operation (unique, where, etc)
+# a nontrivial operation (unique, where, etc). _b is existential
 def magic(p: bool, x: array[a]) -> array[_b]:
     return np.zeros(3) if p else np.zeros(4) # callee chooses b
 
@@ -56,20 +73,3 @@ a = magic(True, np.zeros(1)) + magic(True, np.zeros(2))
 ```
 
 More examples in [tests](https://github.com/johnli0135/numpy-types/tree/master/tests).
-
-## Custom typechecking rules
-
-The typechecker is written so that users can define custom typechecking rules.
-A `callback` decorator provides some syntactic sugar to make this easier.
-
-For example, the following code defines a rule which essentially checks that the `+` operator has type `forall a. a -> a -> a`:
-
-```py
-@callbacks(globals())
-def analyze_plus(self, context, lhs, rhs):
-    context, lhs_type <- self.analyze([context], lhs)
-    context, rhs_type <- self.analyze([context], rhs)
-    context.unify(lhs_type, rhs_type)
-    return [(context, lhs_type)]
-plus = Rule('_lhs + rhs', analyze_plus, 'plus')
-```
