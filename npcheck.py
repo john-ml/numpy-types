@@ -78,8 +78,6 @@ with open(sys.argv[1]) as f:
     try:
         state = c.check(ast.parse(s))
         print('OK')
-        #for Γ in state:
-        #    print(Γ)
     except (CheckError, ConfusionError) as e:
         print(e.pretty(s))
     except Exception as e:

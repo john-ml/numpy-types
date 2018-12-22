@@ -8,6 +8,7 @@ from callbacks import callbacks
 typerule = callbacks
 
 # typechecking rule
+# pattern : str or AST pattern
 # action : Checker * Context * ..kwargs -> [Context * ?a]
 # names of arguments should match names of capture groups in pattern
 class Rule:
@@ -23,9 +24,10 @@ class Rule:
         else:
             return '{} ({})'.format(P.pretty(P.explode(self.pattern)), self.name)
 
+# checker failed at some ast node
 class ASTError(Exception):
     def __init__(self, ast):
-        self.ast = ast # problematic subtree
+        self.ast = ast
 
 # type-checking failed
 class CheckError(ASTError):
@@ -84,7 +86,6 @@ class CheckError(ASTError):
         if len(value_errors) > 0:
             header = '' if summary == '' else 'Among\n' + U.indent('  ', summary)
             return header + ''.join('\n' + pretty(e) for e in value_errors)
-
         if len(confusion_errors) > 0:
             header = '' if summary == '' else 'Among\n' + U.indent('  ', summary)
             return header + ''.join('\n' + pretty(e) for e in confusion_errors)
@@ -108,29 +109,29 @@ no_op = lambda s, a: [(s, a)]
 
 # type-checker acting on a set of checking rules
 class Checker:
-    def __init__(self, rules, return_type=T.TNone(), careful=False, ast_memo={}, memo={}):
+    def __init__(self, rules, return_type=T.TNone(), careful=False, _ast_memo={}, _memo={}):
         self.rules = rules
         self.return_type = return_type
         self.careful = careful
         # memoize past queries (remember which rules worked & the results they yielded)
-        self.ast_memo = {}
-        self.memo = {}
+        self._ast_memo = _ast_memo
+        self._memo = _memo
 
     def carefully(self):
         return Checker(
             self.rules,
             return_type = self.return_type,
             careful = True,
-            ast_memo = self.ast_memo,
-            memo = self.memo)
+            _ast_memo = self._ast_memo,
+            _memo = self._memo)
 
     def returning(self, r):
         return Checker(
             self.rules,
             return_type = r,
             careful = self.careful,
-            ast_memo = self.ast_memo,
-            memo = self.memo)
+            _ast_memo = self._ast_memo,
+            _memo = self._memo)
 
     # try each of the rules in order and run action corresponding to first matching rule
     # Checker * [Context] * AST * (Context * a -> [Context * b]) -> [Context * b]
@@ -142,23 +143,23 @@ class Checker:
         possible_errors = (ValueError, CheckError, ConfusionError, T.UnificationError)
 
         # compute results for each applicable pattern
-        hits, a = self.memo[k] if k in self.memo else (0, None)
+        hits, a = self._memo[k] if k in self._memo else (0, None)
         options = []
         if isinstance(a, Exception):
             raise a
         if a is not None:
             options = a
-            self.memo[k] = (hits + 1, options)
+            self._memo[k] = (hits + 1, options)
         else:
-            if k_ast in self.ast_memo:
-                ast_hits, matches = self.ast_memo[k_ast]
+            if k_ast in self._ast_memo:
+                ast_hits, matches = self._ast_memo[k_ast]
             else:
                 ast_hits = 0
                 matches = [(rule, a)
                     for rule in self.rules
                     for a in [P.matches(rule.pattern, ast)]
                     if a is not None]
-            self.ast_memo[k_ast] = (ast_hits + 1, matches)
+            self._ast_memo[k_ast] = (ast_hits + 1, matches)
 
             options = []
             for Γ in Γs:
@@ -170,9 +171,9 @@ class Checker:
                         errors.append((rule, e))
                 if options == []:
                     e = ConfusionError(ast) if errors == [] else CheckError(ast, errors)
-                    self.memo[k] = (1, e)
+                    self._memo[k] = (1, e)
                     raise e
-            self.memo[k] = (1, options)
+            self._memo[k] = (1, options)
 
         # run continuation with each result
         errors = []
@@ -195,9 +196,9 @@ class Checker:
                 raise
 
     def dump_memo(self, s):
-        for ast, (hits, rules) in sorted(self.ast_memo.items(), key=lambda a: a[1][0]):
+        for ast, (hits, rules) in sorted(self._ast_memo.items(), key=lambda a: a[1][0]):
             print('{}\n{} hits ({} rules)'.format(ast, hits, len(rules)))
-        for (ast, Γs), (hits, _) in sorted(self.memo.items(), key=lambda a: a[1][0]):
+        for (ast, Γs), (hits, _) in sorted(self._memo.items(), key=lambda a: a[1][0]):
             print('{}\n{} hits ({})'.format(U.highlight(ast, s), hits, type(ast).__name__))
             print('Contexts:')
             for c in Γs:
@@ -250,10 +251,10 @@ def extend(self, Γ, bindings, k=no_op):
 # -------------------- basic type-checking rules --------------------
 
 @typerule(globals())
-def analyze_body(self, Γ, body, k=no_op):
-    for a in _, Γ <- body:
-        Γ, __ <- self.analyze([Γ], a)
-        if self.careful:
+def analyze_body(self, Γ, body, k=no_op): 
+    for a in __, Γ <- body: 
+        Γ, _ <- self.analyze([Γ], a)
+        if self.careful: 
             U.verify(Γ)
     return k(Γ, None)
 
@@ -352,8 +353,8 @@ def analyze_fun_def(self, Γ, f, args, return_type, body):
     #print('fun_type =', fun_type)
     #print('polymorphic_fun_type =', polymorphic_fun_type)
 
-    new_Γ, _ <- analyze_body(self.returning(r), nested_Γ, body)
-    U.verify(new_Γ)
+    Γ1, _ <- analyze_body(self.returning(r), nested_Γ, body)
+    U.verify(Γ1)
     return [(Γ.annotate(f, polymorphic_fun_type), None)]
 
 fun_def = Rule('def _f(__args) -> _return_type:\n    __body', analyze_fun_def, 'fun_def')
@@ -371,9 +372,18 @@ lit_num = Rule('num__Num', lambda _, Γ, num:
 int_add = binary_operator('+', T.AVar, T.Add, 'int_add')
 int_mul = binary_operator('*', T.AVar, T.Mul, 'int_mul')
 
+int_eq = binary_operator('==', T.AVar, T.Eq, 'int_eq')
+int_lt = binary_operator('<', T.AVar, T.Lt, 'int_lt')
+int_gt = binary_operator('>', T.AVar, T.Gt, 'int_gt')
+int_le = binary_operator('<=', T.AVar, T.Le, 'int_le')
+int_ge = binary_operator('>=', T.AVar, T.Ge, 'int_ge')
+
+asrt = Rule('assert _a', lambda self, Γ, a:
+    self.analyze([Γ], a, lambda Γ, e: [(Γ.assume(e), None)]))
+
 ret = Rule('return _a', lambda self, Γ, a:
-    self.analyze([Γ], a, lambda new_Γ, t:
-        [(new_Γ.unify(self.return_type, t), None)]), 'return')
+    self.analyze([Γ], a, lambda Γ, t:
+        [(Γ.unify(self.return_type, t), None)]), 'return')
 
 @typerule(globals())
 def analyze_fun_call(self, Γ, f, args):
@@ -439,10 +449,12 @@ basic_rules = [
     attr_ident,
     lit_None, lit_True, lit_False, lit_num,
     bool_or, bool_and, bool_not, int_add, int_mul,
+    int_eq, int_lt, int_gt, int_le, int_ge,
     cond, cond_expr,
     fun_def,
     fun_call,
     lambda_expr,
+    asrt,
     ret,
     print_expr,
     print_stmt]
@@ -458,7 +470,6 @@ if __name__ == '__main__':
         lambda self, Γ: extend(self, Γ, {
             'np.ones': 'Fun((int(a),), array[a])'}),
         'import_numpy')
-
 
     def try_check(s):
         rules = basic_rules + [arr_zeros, add_row, smush, import_numpy]

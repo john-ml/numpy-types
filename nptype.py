@@ -464,6 +464,69 @@ class Not(BExp):
     def gen(self, blacklist=[]):
         return Not(self.a.gen(blacklist))
 
+class Predicate(BExp):
+    def __init__(self, operator, z3ifier, a, b):
+        self.operator = operator
+        self.z3ifier = z3ifier
+        self.a = a
+        self.b = b
+    def __str__(self):
+        return '({} {} {})'.format(self.a, self.operator, self.b)
+    def __eq__(self, other):
+        return (
+            type(self) is type(other)
+            and (self.a, self.b, self.operator) == (other.a, other.b, other.operator))
+    def __hash__(self):
+        return hash((self.operator, self.a, self.b))
+    def uvars(self):
+        return self.a.uvars() | self.b.uvars()
+    def evars(self):
+        return self.a.evars() | self.b.evars()
+    def renamed(self, renamings):
+        return Predicate(
+            self.operator,
+            self.z3ifier,
+            self.a.renamed(renamings),
+            self.b.renamed(renamings))
+    def under(self, σ):
+        return Predicate(
+            self.operator,
+            self.z3ifier,
+            self.a.under(σ),
+            self.b.under(σ))
+    def replaced(self, replacements):
+        return Predicate(
+            self.operator,
+            self.z3ifier,
+            self.a.replaced(replacements),
+            self.b.replaced(replacements))
+    def to_z3(self):
+        return self.z3ifier(self.a.to_z3(), self.b.to_z3())
+    def eapp(self, blacklist=[]):
+        return Predicate(
+            self.operator,
+            self.z3ifier,
+            self.a.eapp(blacklist),
+            self.b.eapp(blacklist))
+    def flipped(self, blacklist=[]):
+        return Predicate(
+            self.operator,
+            self.z3ifier,
+            self.a.flipped(blacklist),
+            self.b.flipped(blacklist))
+    def gen(self, blacklist=[]):
+        return Predicate(
+            self.operator,
+            self.z3ifier,
+            self.a.gen(blacklist),
+            self.b.gen(blacklist))
+
+Eq = lambda a, b: Predicate('==', lambda c, d: c == d, a, b)
+Lt = lambda a, b: Predicate('<', lambda c, d: c < d, a, b)
+Gt = lambda a, b: Predicate('>', lambda c, d: c > d, a, b)
+Le = lambda a, b: Predicate('<=', lambda c, d: c <= d, a, b)
+Ge = lambda a, b: Predicate('>=', lambda c, d: c >= d, a, b)
+
 # -------------------- compound types --------------------
 
 # tuple
@@ -575,13 +638,10 @@ class UnificationError(Exception):
 # update σ : Substitution ∪ Context to unify a and b or fail with ValueError
 # return pointer to σ
 def unify(a, b, σ):
-    a = a.under(σ)
-    b = b.under(σ)
     unwrap = lambda t: (
-        t if type(t) is not Tuple or len(t.items) != 1 else
-        unwrap(t.items[0]))
-    a = unwrap(a)
-    b = unwrap(b)
+        t if type(t) is not Tuple or len(t.items) != 1 else unwrap(t.items[0]))
+    a = unwrap(a.under(σ))
+    b = unwrap(b.under(σ))
 
     # existential variables
     if EVar in (type(a), type(b)):
@@ -598,7 +658,7 @@ def unify(a, b, σ):
             assert type(a.var) is type(b.var) is UVar
             if a == b:
                 return σ
-            raise UnificationError(a, b, 'two rigid type variables')
+            return σ.union(a, b)
 
     # literals
     elif type(a) is type(b) is ALit or type(a) is type(b) is BLit:

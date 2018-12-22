@@ -56,6 +56,10 @@ def to_quantified_z3(a):
     import z3
     t = [b.to_z3() for b in a.uvars() & a.free_vars()]
     e = [b.to_z3() for b in a.evars() & a.free_vars()]
+    #nats_t = z3.And([v >= 0 for v in t if type(v) is z3.ArithRef])
+    #nats_e = z3.And([v >= 0 for v in e if type(v) is z3.ArithRef])
+    #ex = z3.Exists(e, z3.Implies(nats_e, a.to_z3())) if len(e) > 0 else a.to_z3()
+    #return z3.ForAll(t, z3.Implies(nats_t, ex)) if len(t) > 0 else ex
     ex = z3.Exists(e, a.to_z3()) if len(e) > 0 else a.to_z3()
     return z3.ForAll(t, ex) if len(t) > 0 else ex
 

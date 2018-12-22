@@ -111,7 +111,7 @@ class Context:
         return self
 
     def assume(self, G):
-        self.F = T.And(self.F, G)
+        self.F = T.And(self.F, G.under(self))
         self.names |= U.names_of(G)
         self.hash = self.simple = None
         return self
