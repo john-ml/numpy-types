@@ -29,7 +29,7 @@ def f(p: bool, n: int) -> array[n + 2]:
 The typechecker is written so that users can define custom typechecking rules.
 A `callback` decorator provides some syntactic sugar to make this easier.
 
-For example, the following code defines a rule which essentially checks that the `+` operator has type `forall a. a -> a -> a`:
+For example, the following code defines a rule which checks that the `+` operator has type `forall a. a -> a -> a`:
 
 ```py
 @callbacks(globals())
@@ -38,6 +38,20 @@ def analyze_plus(self, context, lhs, rhs):
     context, rhs_type <- self.analyze([context], rhs)
     context.unify(lhs_type, rhs_type)
     return [(context, lhs_type)]
+plus = Rule('_lhs + rhs', analyze_plus, 'plus')
+```
+
+The `@callbacks(globals())` decorator converts this into
+
+```py
+@callbacks(globals())
+def analyze_plus(self, context, lhs, rhs):
+    def __callback0__(context, lhs_type):
+        def __callback1__(context, rhs_type):
+            context.unify(lhs_type, rhs_type)
+            return [(context, lhs_type)]
+        return self.analyze([context], rhs, __callback1__)
+    return self.analyze([context], lhs, __callback0__)
 plus = Rule('_lhs + rhs', analyze_plus, 'plus')
 ```
 
