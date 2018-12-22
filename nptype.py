@@ -574,6 +574,8 @@ class Array(Type):
         return len(self.shape)
     def __iter__(self):
         return (a for a in self.shape)
+    def __reversed__(self):
+        return reversed(self.shape)
     def __hash__(self):
         return hash(('Array', tuple(self.shape)))
     def uvars(self):
@@ -635,7 +637,7 @@ class UnificationError(Exception):
             self.b,
             ('' if self.reason == '' else ' ({})'.format(self.reason)))
 
-# update σ : Substitution ∪ Context to unify a and b or fail with ValueError
+# update σ : Context to unify a and b or fail with ValueError
 # return pointer to σ
 def unify(a, b, σ):
     unwrap = lambda t: (
@@ -669,7 +671,12 @@ def unify(a, b, σ):
     # defer arithmetic or boolean expressions to z3
     elif isinstance(a, AExp) and isinstance(b, AExp) or \
          isinstance(a, BExp) and isinstance(b, BExp):
-        return σ.union(a, b)
+        approx = a.to_z3() == b.to_z3()
+        if type(approx) is not bool:
+            return σ.union(a, b)
+        if not approx:
+            raise UnificationError(a, b, 'unequal values')
+        return σ
 
     elif type(a) is not type(b):
         raise UnificationError(a, b, 'incompatible types')
@@ -680,7 +687,7 @@ def unify(a, b, σ):
     elif type(a) is Fun:
         return unify(a.a, b.a, unify(a.b, b.b, σ))
 
-    elif type(a) in (Array, Tuple):
+    elif type(a) in (Tuple, Array):
         if len(a) != len(b):
             raise UnificationError(a, b, 'unequal lengths')
         for l, r in zip(a, b):

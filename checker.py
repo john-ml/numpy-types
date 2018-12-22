@@ -91,7 +91,7 @@ class CheckError(ASTError):
             return header + ''.join('\n' + pretty(e) for e in confusion_errors)
 
         coords = {U.coords(p[-2].ast) for p in paths}
-        footer = summary if len(paths) > 10 else '\n'.join({str(p[-1]) for p in paths})
+        footer = summary if len(paths) > 10 else ''.join({'\n' + str(p[-1]) for p in paths})
         return '{}{}'.format(
             '\n'.join(
                 U.code_pointers(row, [c for r, c in coords if r == row], s)

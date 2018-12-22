@@ -55,7 +55,7 @@ def analyze_plus(self, context, lhs, rhs):
 plus = Rule('_lhs + rhs', analyze_plus, 'plus')
 ```
 
-## Some examples
+## Misc. examples
 
 ### Type inference for lambda expressions
 
@@ -70,6 +70,7 @@ def plus(a: int, b: int) -> a + b:
     return a + b
 
 def test(a: int, b: int) -> None:
+    # ab = a + b
     ab = flip(curry)(a)(plus)(b)
     # Unsatisfiable constraint: ForAll([a, b], Implies(And(True), And(True, a + b == 3)))
     result = np.zeros(ab) + np.zeros(3)

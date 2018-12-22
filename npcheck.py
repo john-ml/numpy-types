@@ -11,7 +11,7 @@ if len(sys.argv) < 2:
 
 def numpy_rules(alias):
     P = lambda s: s.replace('np.', alias + '.')
-    def all_overloads(f, n=5):
+    def all_overloads(f, n=3):
         c = 'a'
         s = [c]
         results = []
@@ -34,7 +34,7 @@ def numpy_rules(alias):
         return (all_overloads(lambda s: same_dims(', '.join(s))) +
                 all_overloads(lambda s: scalar_broadcast(', '.join(s))))
     constructor = lambda name: all_overloads(lambda a: [
-        expression(P('np.{}(({}))'.format(name, ', '.join('_' + b for b in a))),
+        expression(P('{}.{}(({}))'.format(alias, name, ', '.join('_' + b for b in a))),
             dict((v, AVar(UVar(v))) for v in a),
             parse('array[{}]'.format(', '.join(a))),
             '{}({})'.format(name, ', '.join(a)))])
@@ -42,8 +42,8 @@ def numpy_rules(alias):
         rules = []
         for i in range(len(a)):
             rules.append(expression(
-                P('_a.shape[_i]'),
-                {'a': arr_type(', '.join(a)), 'i': ALit(i)},
+                P('_a.shape[{}]'.format(i)),
+                {'a': arr_type(', '.join(a))},
                 AVar(UVar(a[i])),
                 'shape({})({})'.format(', '.join(a), i)))
         return rules
@@ -60,6 +60,8 @@ def numpy_rules(alias):
 
 def analyze_import_numpy(self, context, np):
     self.rules = numpy_rules(np) + self.rules
+    #for rule in self.rules:
+    #    print(rule)
     return [(context, None)]
 
 rules = basic_rules + [
@@ -77,6 +79,7 @@ with open(sys.argv[1]) as f:
     c = Checker(rules)
     try:
         state = c.check(ast.parse(s))
+        #print(state)
         print('OK')
     except (CheckError, ConfusionError) as e:
         print(e.pretty(s))

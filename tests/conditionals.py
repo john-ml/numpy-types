@@ -28,6 +28,10 @@ print(g(True, 3, np.zeros(3)))
 print(g(False, 3, np.zeros(3)))
 
 def h(a: int, b: int) -> array[a]:
+    # Unsatisfiable constraint: ForAll([b, a],
+    #        Implies(And(True, a == a),
+    #                And(And(True, b == a), True)))
+    # if a == a:
     if a == b:
         return np.zeros(b) # OK: array[a] ~ array[b] implied by a == b
     else:
@@ -46,7 +50,7 @@ def j(a: int) -> array[5]:
 def k(a: int) -> array[3]:
     assert a >= 0
     if a < 1:
-        # OK: aarray[a + 3] ~ array[3] implied by a >= 0 /\ a < 1
+        # OK: array[a + 3] ~ array[3] implied by a >= 0 /\ a < 1
         return np.zeros(a + 3)
 
 def l(a: int) -> array[3]:

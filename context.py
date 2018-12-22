@@ -9,16 +9,18 @@ class Context:
     def __init__(self):
         self.σ = S.Substitution(lambda a, b: a << b)
         self.Γ = {}
-        self.F = T.BLit(True)
+        self.assumes = T.BLit(True)
+        self.requires = T.BLit(True)
         self.names = {}
         self.fixed = {}
         self.hash = None
         self.simple = None
 
     def __str__(self):
-        return '{} -> {} ({} fixed) ({})'.format(
-            self.F,
+        return '{} -> {} /\\ {} ({} fixed) ({})'.format(
+            self.assumes,
             U.typedict(self.Γ),
+            self.requires,
             '{' + ', '.join(self.fixed) + '}',
             self.σ)
 
@@ -34,7 +36,8 @@ class Context:
         c.σ.equalities = {(renamed(l), renamed(r)) for l, r in self.σ.equalities}
         c.σ.bias = self.σ.bias
         c.Γ = dict((renamed(k), renamed(v)) for k, v in self.Γ.items())
-        c.F = renamed(self.F)
+        c.assumes = renamed(self.assumes)
+        c.requires = renamed(self.requires)
         c.names = {(renaming[a] if a in renaming else a) for a in self.names}
         c.fixed = {(renaming[a] if a in renaming else a) for a in self.names}
         return c
@@ -47,7 +50,11 @@ class Context:
     def __hash__(self):
         if self.hash is None:
             simple = self.reduced()
-            self.hash = hash((simple.σ, tuple(simple.Γ.items()), simple.F))
+            self.hash = hash((
+                simple.σ,
+                tuple(simple.Γ.items()),
+                simple.assumes,
+                simple.requires))
         return self.hash
 
     def __eq__(self, other):
@@ -55,13 +62,16 @@ class Context:
             return False
         self = self.reduced()
         other = other.reduced()
-        return (self.σ, self.Γ, self.F) == (other.σ, other.Γ, other.F)
+        return (
+            (self.σ, self.Γ, self.assumes, self.requires)
+            == (other.σ, other.Γ, other.assumes, other.requires))
 
     def copy(self):
         c = Context()
         c.σ = self.σ.copy()
         c.Γ = dict(self.Γ)
-        c.F = self.F
+        c.assumes = self.assumes
+        c.requires = self.requires
         c.names = set(self.names)
         c.fixed = set(self.fixed)
         c.hash = self.hash
@@ -93,7 +103,8 @@ class Context:
         self.σ.gen(names)
         for k, v in self.Γ.items():
             self.Γ[k] = self.Γ[k].gen(names)
-        self.F = self.F.gen(names)
+        self.assumes = self.assumes.gen(names)
+        self.requires = self.requires.gen(names)
         self.hash = self.simple = None
         return t
 
@@ -111,26 +122,34 @@ class Context:
         return self
 
     def assume(self, G):
-        self.F = T.And(self.F, G.under(self))
+        self.assumes = T.And(self.assumes, G.under(self))
+        self.names |= U.names_of(G)
+        self.hash = self.simple = None
+        return self
+
+    def require(self, G):
+        self.requires = T.And(self.requires, G.under(self))
         self.names |= U.names_of(G)
         self.hash = self.simple = None
         return self
 
     def evars(self):
-        return self.σ.evars() | self.F.evars()
+        return self.σ.evars() | self.assumes.evars() | self.requires.evars()
 
     def uvars(self):
-        return self.σ.uvars() | self.F.uvars()
+        return self.σ.uvars() | self.assumes.uvars() | self.requires.uvars()
 
     def free_vars(self):
-        return self.F.vars() | self.σ.free_vars()
+        return self.assumes.vars() | self.σ.free_vars() | self.requires.vars()
 
     def to_z3(self):
         import z3
-        return z3.Implies(self.F.to_z3(), self.σ.to_z3())
+        return z3.Implies(
+            self.assumes.to_z3(),
+            z3.And(self.σ.to_z3(), self.requires.to_z3()))
 
     def unify(self, a, b):
-        T.unify(a, b, self.σ)
+        T.unify(a, b, self)
         return self
 
 # multiple possible Contexts + ability to branch on new conditions
