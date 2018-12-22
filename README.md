@@ -27,7 +27,7 @@ def f(p: bool, n: int) -> array[n + 2]:
 ## Custom typechecking rules
 
 The typechecker is written so that users can define custom typechecking rules.
-A `callback` decorator provides some syntactic sugar to make this easier.
+A `typerule` decorator provides some syntactic sugar to make this easier.
 
 e.g. to extend the type checker with rule
 ```
@@ -50,13 +50,11 @@ def analyze_shape_i(self, context, array, index):
 shape_i = Rule('_array.shape[index__Num]', analyze_shape_i)
 ```
 
-The `@callbacks(globals())` decorator converts this into
+The `@typerule(globals())` decorator converts this into
 ```py
 def analyze_shape_i(self, context, array, index):
-    def __callback50__(context, array_type):
-        nonlocal self
-        nonlocal index
-        nonlocal array
+    def __callback0__(context, array_type):
+        nonlocal self, index, array
         if type(array_type) is not Array:
             raise UnificationError(a, Array([AVar(UVar('a'))]), 'expected array type')
         index = index.n
@@ -64,12 +62,28 @@ def analyze_shape_i(self, context, array, index):
             return [(context, array_type[index])]
         else:
             raise ValueError(f'index {index} out of range of dimensions {array_type}')
-    return self.analyze([context], array, __callback50__)
+    return self.analyze([context], array, __callback0__)
 
 shape_i = Rule('_array.shape[index__Num]', analyze_shape_i)
 ```
 
 ## Misc. examples
+
+### Broadcasting rules
+```py
+a = np.zeros((3, 4,))
+b = np.ones(2)
+
+# Can't unify 'array[3, 4]' with 'array[2]' (unbroadcastable dimensions)
+# c = a + b
+
+d = np.zeros((8, 1, 6, 1))
+e = np.ones((7, 1, 5))
+f = d * e # OK. i: array[8, 7, 6, 5]
+
+# Can't unify 'array[8, 7, 6]' with 'array[8, 7, 6, 5]' (unbroadcastable dimensions)
+# g = np.zeros((8, 7, 6)) + f
+```
 
 ### Type inference for lambda expressions
 
@@ -90,7 +104,7 @@ def test(a: int, b: int) -> None:
     result = np.zeros(ab) + np.zeros(3)
 ```
 
-### Existential types
+### Existential types for complex operations
 
 ```py
 # a nontrivial operation (unique, where, etc). _b is existential
