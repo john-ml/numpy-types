@@ -51,6 +51,7 @@ def analyze_binary_op(self, Γ, lhs, rhs):
             else:
                 shape.append(l)
         else:
+            # if not obviously broadcastable, dimensions must be equal
             Γ.unify(l, r)
             shape.append(l)
 
@@ -58,7 +59,6 @@ def analyze_binary_op(self, Γ, lhs, rhs):
     leftover_dims = longer_type[: -min(len(lhs_type), len(rhs_type))]
     shape = leftover_dims + shape[::-1]
     return [(Γ, Array(shape))]
-
 
 # generate rules for numpy operations on all <=depth-dimensional arrays
 def numpy_rules(alias, depth=4):
@@ -99,11 +99,11 @@ def numpy_rules(alias, depth=4):
         binary_ops('+', '*', '-', '/', '**') +
         [Rule('_array.shape[index__Num]', analyze_shape_i)])
 
-def analyze_import_numpy(self, context, np):
-    self.rules = numpy_rules(np) + self.rules
+def analyze_import_numpy(self, Γ, np):
+    self.rules = numpy_rules(np, depth=4) + self.rules
     #for rule in self.rules:
     #    print(rule)
-    return [(context, None)]
+    return [(Γ, None)]
 
 rules = basic_rules + [
     Rule(
@@ -112,7 +112,7 @@ rules = basic_rules + [
         'import_numpy'),
     Rule(
         'from nptyping import *',
-        lambda self, context: [(context, None)],
+        lambda self, Γ: [(Γ, None)],
         'nptyping')]
 
 try:

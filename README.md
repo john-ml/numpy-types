@@ -50,23 +50,6 @@ def analyze_shape_i(self, context, array, index):
 shape_i = Rule('_array.shape[index__Num]', analyze_shape_i)
 ```
 
-The `@typerule(globals())` decorator converts this into
-```py
-def analyze_shape_i(self, context, array, index):
-    def __callback0__(context, array_type):
-        nonlocal self, index, array
-        if type(array_type) is not Array:
-            raise UnificationError(a, Array([AVar(UVar('a'))]), 'expected array type')
-        index = index.n
-        if index < len(array_type):
-            return [(context, array_type[index])]
-        else:
-            raise ValueError(f'index {index} out of range of dimensions {array_type}')
-    return self.analyze([context], array, __callback0__)
-
-shape_i = Rule('_array.shape[index__Num]', analyze_shape_i)
-```
-
 ## Misc. examples
 
 ### Broadcasting
