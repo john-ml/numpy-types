@@ -576,6 +576,8 @@ class Array(Type):
         return (a for a in self.shape)
     def __reversed__(self):
         return reversed(self.shape)
+    def __getitem__(self, a):
+        return self.shape[a]
     def __hash__(self):
         return hash(('Array', tuple(self.shape)))
     def uvars(self):
