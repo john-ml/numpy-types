@@ -17,7 +17,7 @@ zipwith = lambda f, a: (f(l, r) for l, r in a)
 def make_fresh():
     i = 0
     while True:
-        yield 'fresh' + str(i)
+        yield str(i)
         i += 1
 fresh_ids = make_fresh()
 
