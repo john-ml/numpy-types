@@ -8,4 +8,4 @@ def f(a: int) -> a + 1:
 a = True 
 
 # Can't unify 'Fun(((a : int)), ((a : int) + 1))' with 'array[1]'
-f = np.ones(1)+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1
+f = np.ones(1)+1+1+1+1+1+1+1+1+1+1
