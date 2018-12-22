@@ -73,13 +73,9 @@ def callbacks(context):
         runs the code 'after' the loop with l1 and updated α, β, ..
     """
     def decorator(f):
-        lines = inspect.getsource(f).split('\n')
-        lines = lines[1:] # drop decorator header
-        decl, lines = lines[0], lines[1:] # grab declaration
-
         def indent(lines, level=4):
             space= ' ' * level
-            return [space + l for l in lines]
+            return [(space + l if len(l.strip()) > 0 else '') for l in lines]
 
         def is_callback(line):
             return ' <- ' in line
@@ -107,7 +103,7 @@ def callbacks(context):
                 return False
             return True
 
-        def go_for(line, body, rest):
+        def go_for(line, body, rest, nonlocals=set()):
             tokens = [t
                 for token in line.split()
                 for t in [token.replace(',', '').replace(':', '')]
@@ -141,12 +137,12 @@ def callbacks(context):
                         [f'({values}), {l2} = {l2}[0], {l2}[1:]']))
             return indent(
                 header +
-                indent(indent(go(body))) +
+                indent(indent(go(body, nonlocals))) + # TODO: update nonlocals properly
                 indent(['else:']) +
-                indent(indent(go(rest))) +
+                indent(indent(go(rest, nonlocals))) +
                 [f'return {loop}(tuple({l}), {captures} {l1}=())'], level)
 
-        def go(lines):
+        def go(lines, nonlocals=set()):
             if lines == []:
                 return []
             line, lines = lines[0], lines[1:]
@@ -159,7 +155,7 @@ def callbacks(context):
             if is_for(line):
                 i = next_dedent(lines, level, strict=True)
                 body, rest = lines[:i], lines[i:]
-                return go_for(line, body, rest)
+                return go_for(line, body, rest, nonlocals)
 
             i = next_dedent(lines, level)
             body, rest = lines[:i], lines[i:]
@@ -175,13 +171,22 @@ def callbacks(context):
                 (', ' if call[-2] != '(' else ''),
                 callback)
 
+            argnames = set(args.split(', '))
             return (
                 [level * ' ' + header] +
-                go(indent(body)) +
+                indent([level * ' ' + 'nonlocal ' + a for a in nonlocals - argnames]) + 
+                go(indent(body), nonlocals | argnames) +
                 [level * ' ' + footer] +
-                go(rest))
+                go(rest, nonlocals | argnames))
 
-        src = maximally_dedent([decl] + go(lines))
+        lines = inspect.getsource(f).split('\n')
+        lines = lines[1:] # drop decorator header
+        decl, lines = lines[0], lines[1:] # grab declaration
+        args = set(a
+            for a in decl[decl.index('(') + 1 : decl.index(')')].split(', ')
+            if '=' not in a)
+
+        src = maximally_dedent([decl] + go(lines, args))
         src = '\n'.join(src)
 
         #print(src)
