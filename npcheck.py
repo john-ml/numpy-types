@@ -82,21 +82,22 @@ def numpy_rules(alias, depth=4):
             Rule(f'_lhs {op} _rhs', analyze_binary_op, f'array_{op}')
             for op in ops]
 
-    # extracting dimensions of arrays w/ array.shape[k]
+    # extracting dimensions of arrays w/ array.shape[i]
     @typerule(globals())
-    def analyze_shape(self, Γ, a, i):
-        Γ, ta <- self.analyze([Γ], a)
-        if type(ta) is not Array:
+    def analyze_shape_i(self, Γ, array, index):
+        Γ, array_type <- self.analyze([Γ], array)
+        if type(array_type) is not Array:
             raise UnificationError(a, Array([AVar(UVar('a'))]), 'expected array type')
-        i = i.n
-        if i >= len(ta):
-            raise ValueError(f'index {i} out of range of dimensions {ta}')
-        return [(Γ, ta[i])]
+        index = index.n
+        if index < len(array_type):
+            return [(Γ, array_type[index])]
+        else:
+            raise ValueError(f'index {index} out of range of dimensions {array_type}')
 
     return (
         constructor('zeros') + constructor('ones') +
         binary_ops('+', '*', '-', '/', '**') +
-        [Rule('_a.shape[i__Num]', analyze_shape)])
+        [Rule('_array.shape[index__Num]', analyze_shape_i)])
 
 def analyze_import_numpy(self, context, np):
     self.rules = numpy_rules(np) + self.rules

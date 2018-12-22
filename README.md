@@ -29,30 +29,44 @@ def f(p: bool, n: int) -> array[n + 2]:
 The typechecker is written so that users can define custom typechecking rules.
 A `callback` decorator provides some syntactic sugar to make this easier.
 
-For example, the following code defines a rule which checks that the `+` operator has type `forall a. a -> a -> a`:
+e.g. to extend the type checker with rule
+```
+i : nat, a : array (l : list nat), i < len(l) |- a.shape[i] = l[i]
+```
 
+can write
 ```py
-@callbacks(globals())
-def analyze_plus(self, context, lhs, rhs):
-    context, lhs_type <- self.analyze([context], lhs)
-    context, rhs_type <- self.analyze([context], rhs)
-    context.unify(lhs_type, rhs_type)
-    return [(context, lhs_type)]
-plus = Rule('_lhs + rhs', analyze_plus, 'plus')
+@typerule(globals())
+def analyze_shape_i(self, context, array, index):
+    context, array_type <- self.analyze([context], array)
+    if type(array_type) is not Array:
+        raise UnificationError(a, Array([AVar(UVar('a'))]), 'expected array type')
+    index = index.n
+    if index < len(array_type):
+        return [(context, array_type[index])]
+    else:
+        raise ValueError(f'index {index} out of range of dimensions {array_type}')
+
+shape_i = Rule('_array.shape[index__Num]', analyze_shape_i)
 ```
 
 The `@callbacks(globals())` decorator converts this into
-
 ```py
-@callbacks(globals())
-def analyze_plus(self, context, lhs, rhs):
-    def __callback0__(context, lhs_type):
-        def __callback1__(context, rhs_type):
-            context.unify(lhs_type, rhs_type)
-            return [(context, lhs_type)]
-        return self.analyze([context], rhs, __callback1__)
-    return self.analyze([context], lhs, __callback0__)
-plus = Rule('_lhs + rhs', analyze_plus, 'plus')
+def analyze_shape_i(self, context, array, index):
+    def __callback50__(context, array_type):
+        nonlocal self
+        nonlocal index
+        nonlocal array
+        if type(array_type) is not Array:
+            raise UnificationError(a, Array([AVar(UVar('a'))]), 'expected array type')
+        index = index.n
+        if index < len(array_type):
+            return [(context, array_type[index])]
+        else:
+            raise ValueError(f'index {index} out of range of dimensions {array_type}')
+    return self.analyze([context], array, __callback50__)
+
+shape_i = Rule('_array.shape[index__Num]', analyze_shape_i)
 ```
 
 ## Misc. examples
