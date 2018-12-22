@@ -69,23 +69,23 @@ shape_i = Rule('_array.shape[index__Num]', analyze_shape_i)
 
 ## Misc. examples
 
-### Broadcasting rules
+### Broadcasting
 ```py
 a = np.zeros((3, 4,))
 b = np.ones(2)
 
 # Can't unify 'array[3, 4]' with 'array[2]' (unbroadcastable dimensions)
-# c = a + b
+c = a + b
 
 d = np.zeros((8, 1, 6, 1))
 e = np.ones((7, 1, 5))
 f = d * e # OK. i: array[8, 7, 6, 5]
 
 # Can't unify 'array[8, 7, 6]' with 'array[8, 7, 6, 5]' (unbroadcastable dimensions)
-# g = np.zeros((8, 7, 6)) + f
+g = np.zeros((8, 7, 6)) + f
 ```
 
-### Type inference for lambda expressions
+### Inference for lambda expressions
 
 ```py
 flip = lambda f: lambda a: lambda b: f(b)(a)
@@ -104,7 +104,7 @@ def test(a: int, b: int) -> None:
     result = np.zeros(ab) + np.zeros(3)
 ```
 
-### Existential types for complex operations
+### Existential types
 
 ```py
 # a nontrivial operation (unique, where, etc). _b is existential
@@ -113,6 +113,9 @@ def magic(p: bool, x: array[a]) -> array[_b]:
 
 # not possible: caller sees (_ : array[b]) + (_ : array[b'])
 a = magic(True, np.zeros(1)) + magic(True, np.zeros(2))
+# Unsatisfiable constraint: ForAll([_18, _24],
+#        And(Implies(True, And(And(_18 == _24), True)),
+#            Implies(True, And(And(_18 == _24), True))))
 ```
 
 More examples in [tests](https://github.com/johnli0135/numpy-types/tree/master/tests).
