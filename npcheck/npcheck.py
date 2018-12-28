@@ -76,6 +76,9 @@ def numpy_rules(alias, depth=4):
             args.append('_a' + next(U.fresh_ids))
         return rules
 
+    def constructors(*names):
+        return [rule for name in names for rule in constructor(name)]
+
     # generate rules for binary operators on arrays with broadcastable dimensions
     def binary_ops(*ops):
         return [
@@ -95,7 +98,8 @@ def numpy_rules(alias, depth=4):
             raise ValueError(f'index {index} out of range of dimensions {array_type}')
 
     return (
-        constructor('zeros') + constructor('ones') +
+        constructors(
+            'zeros', 'ones', 'eye', 'diag', 'empty', 'random.rand', 'random.randn') +
         binary_ops('+', '*', '-', '/', '**') +
         [Rule('_array.shape[index__Num]', analyze_shape_i)])
 
@@ -125,7 +129,7 @@ c = Checker(rules)
 #state = c.check(ast.parse(s))
 try:
     state = c.check(ast.parse(s))
-    #print(state)
+    print(state)
     print('OK')
 except (CheckError, ConfusionError) as e:
     print(e.pretty(s))

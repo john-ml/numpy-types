@@ -5,7 +5,7 @@ callback_names = map(
     lambda a: '__callback{}__'.format(a),
     U.make_fresh())
 
-def callbacks(context):
+def callbacks(context, debug=False):
     """
     augment a function with 'callback notation'
 
@@ -189,7 +189,8 @@ def callbacks(context):
         src = maximally_dedent([decl] + go(lines, args))
         src = '\n'.join(src)
 
-        #print(src)
+        if debug:
+            print(src)
         exec(src, context)
         return context[f.__name__]
 

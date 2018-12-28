@@ -15,4 +15,4 @@ h = np.ones((7, 1, 5))
 i = g * h # OK. i: array[8, 7, 6, 5]
 
 # Can't unify 'array[8, 7, 6]' with 'array[8, 7, 6, 5]' (unbroadcastable dimensions)
-# j = np.zeros((8, 7, 6)) + i
+j = np.zeros((8, 7, 6)) + i
