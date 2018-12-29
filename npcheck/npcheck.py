@@ -3,7 +3,8 @@ from nptype import *
 from context import *
 import util as U
 import sys
-import ast
+import ast as A
+import pattern as P
 
 if len(sys.argv) < 2:
     print('Usage: python3 numpycheck.py <file to check>')
@@ -17,6 +18,33 @@ def analyze_constructor(self, Γ, **kwargs):
         Γ.unify(t, avars[k])
         yield t
     return [(Γ, Array(shape))]
+
+@typerule(globals())
+def analyze_index(self, Γ, array, dims):
+    Γ, array_type <- self.analyze([Γ], array)
+    if type(array_type) is not Array:
+        raise UnificationError(array_type, Array([UVar('a')]), 'expected array type')
+    if len(dims) > len(array_type):
+        raise ValueError('Too many indices for array')
+    new_shape = []
+    for arr, dim in zip(array_type, dims):
+        if type(dim) is A.Index:
+            continue
+        if type(dim) is A.Slice:
+            try:
+                l = ALit(dim.lower.n) if dim.lower is not None else ALit(0)
+                r = ALit(dim.upper.n) if dim.upper is not None else arr
+                new_dim = r.to_z3() - l.to_z3()
+                if type(new_dim) is int:
+                    new_shape.append(ALit(new_dim))
+                else:
+                    raise ValueError() # TODO
+            except:
+                raise ValueError('Nonconstant slices not supported')
+        else:
+            raise ValueError('Unknown ast node: ' + type(dim).__name__)
+    new_shape += array_type[len(dims) :]
+    return [(Γ, Array(new_shape))]
 
 @typerule(globals())
 def analyze_binary_op(self, Γ, lhs, rhs):
@@ -102,10 +130,11 @@ def numpy_rules(alias, depth=4):
             raise ValueError(f'index {index} out of range of dimensions {array_type}')
 
     return (
-        constructors(
-            'zeros', 'ones', 'eye', 'diag', 'empty', 'random.rand', 'random.randn') +
-        binary_ops('+', '*', '-', '/', '**') +
-        [Rule('_array.shape[index__Num]', analyze_shape_i)])
+        constructors('zeros', 'ones', 'empty') +
+        # 'eye', 'diag', 'empty', 'random.rand', 'random.randn') +
+        binary_ops('+', '*', '-', '/', '**', '//') +
+        [Rule('_array.shape[index__Num]', analyze_shape_i)] +
+        [Rule('_array[__dims]', analyze_index)])
 
 def analyze_import_numpy(self, Γ, np):
     self.rules = numpy_rules(np, depth=4) + self.rules
@@ -130,9 +159,8 @@ except FileNotFoundError:
     exit()
 
 c = Checker(rules)
-#state = c.check(ast.parse(s))
 try:
-    state = c.check(ast.parse(s))
+    state = c.check(A.parse(s))
     #print(state)
     print('OK')
 except (CheckError, ConfusionError) as e:
