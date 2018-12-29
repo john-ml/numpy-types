@@ -129,7 +129,7 @@ c = Checker(rules)
 #state = c.check(ast.parse(s))
 try:
     state = c.check(ast.parse(s))
-    print(state)
+    #print(state)
     print('OK')
 except (CheckError, ConfusionError) as e:
     print(e.pretty(s))

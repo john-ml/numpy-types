@@ -75,6 +75,16 @@ def matches(pattern, query):
     if type(pattern) is ast.Name and '__' in pattern.id and \
        type(query).__name__ == pattern.id[pattern.id.index('__')+2:]:
         return { pattern.id[:pattern.id.index('__')]: query }
+   
+    # capture multiple subscripts in 1 variable
+    if type(pattern) is ast.Index and type(pattern.value) is ast.Name and \
+       pattern.value.id.startswith('__') and \
+       type(query) in (ast.Index, ast.ExtSlice, ast.Slice):
+        value = (
+            query.value if type(query) is ast.Index else
+            query.dims if type(query) is ast.ExtSlice else
+            query)
+        return { pattern.value.id[2:]: value }
 
     if type(pattern) is not type(query):
         return None
@@ -82,12 +92,6 @@ def matches(pattern, query):
     # ignore .context (don't care whether is Load or Store)
     if type(pattern) is ast.Name:
         return {} if pattern.id == query.id else None
-   
-    # capture multiple subscripts in 1 variable
-    if type(pattern) is type(query) is ast.Index and \
-       type(pattern.value) is ast.Name and \
-       pattern.value.id.startswith('__'):
-        return { pattern.value.id[2:]: query.value }
 
     if type(pattern) is list:
         if len(pattern) == 1 \
@@ -129,6 +133,7 @@ def matches(pattern, query):
            type(pattern) is ast.alias and (k == 'name' or k == 'asname') and \
                v is not None and v.startswith('_'):
             v = ast.parse(v).body[0].value
+
         c = matches(v, v1)
         if c is None:
             return None
