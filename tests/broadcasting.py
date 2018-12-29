@@ -13,6 +13,8 @@ e = a + b
 g = np.zeros((8, 1, 6, 1))
 h = np.ones((7, 1, 5))
 i = g * h # OK. i: array[8, 7, 6, 5]
+i = 3 + i # OK. scalar broadcast
+i = i * 5 # OK. scalar broadcast
 
 # Can't unify 'array[8, 7, 6]' with 'array[8, 7, 6, 5]' (unbroadcastable dimensions)
 j = np.zeros((8, 7, 6)) + i

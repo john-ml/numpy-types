@@ -24,6 +24,10 @@ def analyze_binary_op(self, Γ, lhs, rhs):
     Γ, rhs_type <- self.analyze([Γ], rhs)
     lhs_type = lhs_type.under(Γ)
     rhs_type = rhs_type.under(Γ)
+    if isinstance(lhs_type, AExp) and type(rhs_type) is Array:
+        return [(Γ, rhs_type)]
+    if isinstance(rhs_type, AExp) and type(lhs_type) is Array:
+        return [(Γ, lhs_type)]
     if type(lhs_type) is not Array:
         raise UnificationError(lhs_type, Array([UVar('a')]), 'expected array type')
     if type(rhs_type) is not Array:
