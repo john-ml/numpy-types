@@ -31,19 +31,21 @@ A `typerule` decorator provides some syntactic sugar to make this easier.
 
 e.g. to extend the type checker with rule
 ```
-i : nat, a : array (l : list nat), i < len(l) |- a.shape[i] = l[i]
+Γ |- i : nat, a : array (l : list nat), i < len(l)
+==================================================
+               Γ |- a.shape[i] = l[i] : nat
 ```
 
 can write
 ```py
 @typerule(globals())
-def analyze_shape_i(self, context, array, index):
-    context, array_type <- self.analyze([context], array)
+def analyze_shape_i(self, Γ, array, index):
+    Γ, array_type <- self.analyze([Γ], array)
     if type(array_type) is not Array:
         raise UnificationError(a, Array([AVar(UVar('a'))]), 'expected array type')
     index = index.n
     if index < len(array_type):
-        return [(context, array_type[index])]
+        return [(Γ, array_type[index])]
     else:
         raise ValueError(f'index {index} out of range of dimensions {array_type}')
 
