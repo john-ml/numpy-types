@@ -33,7 +33,7 @@ e.g. to extend the type checker with rule
 ```
 Γ |- i : nat, a : array (l : list nat), i < len(l)
 ==================================================
-               Γ |- a.shape[i] = l[i] : nat
+          Γ |- a.shape[i] = l[i] : nat
 ```
 
 can write
@@ -42,7 +42,7 @@ can write
 def analyze_shape_i(self, Γ, array, index):
     Γ, array_type <- self.analyze([Γ], array)
     if type(array_type) is not Array:
-        raise UnificationError(a, Array([AVar(UVar('a'))]), 'expected array type')
+        raise UnificationError(array_type, Array([AVar(UVar('a'))]), 'expected array type')
     index = index.n
     if index < len(array_type):
         return [(Γ, array_type[index])]

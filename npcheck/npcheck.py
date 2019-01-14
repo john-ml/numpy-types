@@ -10,6 +10,10 @@ if len(sys.argv) < 2:
     print('Usage: python3 numpycheck.py <file to check>')
     exit()
 
+def expect(t, t1):
+    if type(t) is not type(t1):
+        raise UnificationError(t, t1)
+
 @typerule(globals())
 def analyze_constructor(self, Γ, **kwargs):
     avars = dict(zip(kwargs, map(AVar, map(EVar, U.fresh_ids))))
@@ -22,8 +26,7 @@ def analyze_constructor(self, Γ, **kwargs):
 @typerule(globals())
 def analyze_index(self, Γ, array, dims):
     Γ, array_type <- self.analyze([Γ], array)
-    if type(array_type) is not Array:
-        raise UnificationError(array_type, Array([UVar('a')]), 'expected array type')
+    expect(array_type, Array([EVar('a')]))
     if len(dims) > len(array_type):
         raise ValueError('Too many indices for array')
     new_shape = []
@@ -46,20 +49,15 @@ def analyze_index(self, Γ, array, dims):
     new_shape += array_type[len(dims) :]
     return [(Γ, Array(new_shape))]
 
-@typerule(globals())
-def analyze_binary_op(self, Γ, lhs, rhs):
-    Γ, lhs_type <- self.analyze([Γ], lhs)
-    Γ, rhs_type <- self.analyze([Γ], rhs)
+def check_broadcastable(Γ, lhs_type, rhs_type):
     lhs_type = lhs_type.under(Γ)
     rhs_type = rhs_type.under(Γ)
     if isinstance(lhs_type, AExp) and type(rhs_type) is Array:
         return [(Γ, rhs_type)]
     if isinstance(rhs_type, AExp) and type(lhs_type) is Array:
         return [(Γ, lhs_type)]
-    if type(lhs_type) is not Array:
-        raise UnificationError(lhs_type, Array([UVar('a')]), 'expected array type')
-    if type(rhs_type) is not Array:
-        raise UnificationError(rhs_type, Array([UVar('a')]), 'expected array type')
+    expect(lhs_type, Array([EVar('a')]))
+    expect(rhs_type, Array([EVar('a')]))
 
     # check for arithmetic evar
     is_evar = lambda v: type(v) is AVar and type(a.var) is EVar
@@ -78,10 +76,7 @@ def analyze_binary_op(self, Γ, lhs, rhs):
         if type(eq) is bool:
             if not eq:
                 raise UnificationError(lhs_type, rhs_type, 'unbroadcastable dimensions')
-            if eq_l1:
-                shape.append(r)
-            else:
-                shape.append(l)
+            shape.append(r if eq_l1 else l)
         else:
             # if not obviously broadcastable, dimensions must be equal
             Γ.unify(l, r)
@@ -91,6 +86,12 @@ def analyze_binary_op(self, Γ, lhs, rhs):
     leftover_dims = longer_type[: -min(len(lhs_type), len(rhs_type))]
     shape = leftover_dims + shape[::-1]
     return [(Γ, Array(shape))]
+
+@typerule(globals())
+def analyze_binary_op(self, Γ, lhs, rhs):
+    Γ, lhs_type <- self.analyze([Γ], lhs)
+    Γ, rhs_type <- self.analyze([Γ], rhs)
+    return check_broadcastable(Γ, lhs_type, rhs_type)
 
 # generate rules for numpy operations on all <=depth-dimensional arrays
 def numpy_rules(alias, depth=4):
@@ -121,8 +122,7 @@ def numpy_rules(alias, depth=4):
     @typerule(globals())
     def analyze_shape_i(self, Γ, array, index):
         Γ, array_type <- self.analyze([Γ], array)
-        if type(array_type) is not Array:
-            raise UnificationError(a, Array([AVar(UVar('a'))]), 'expected array type')
+        expect(array_type, Array([EVar('a')]))
         index = index.n
         if index < len(array_type):
             return [(Γ, array_type[index])]
